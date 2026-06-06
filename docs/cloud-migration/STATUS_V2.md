@@ -5,7 +5,7 @@
 > listed here. The canonical plan ("god document") is
 > [`FRIDAY_V2_GOD_DOC.md`](./FRIDAY_V2_GOD_DOC.md).
 
-**Last updated:** 2026-06-06 (Phase 5 complete)
+**Last updated:** 2026-06-06 (Phase 6 complete)
 
 ## Legend
 
@@ -23,8 +23,8 @@
 | 3 | Model-narrated progress | `[x]` DONE |
 | 4 | Backend server | `[x]` DONE |
 | 5 | Modern GUI | `[x]` DONE |
-| 6 | Voice (Piper TTS + STT) | `[~]` IN-PROGRESS |
-| 7 | Module porting waves | `[ ]` TODO |
+| 6 | Voice (Piper TTS + STT) | `[x]` DONE |
+| 7 | Module porting waves | `[~]` IN-PROGRESS |
 | 8 | Purge legacy | `[ ]` TODO |
 | 9 | Finalize | `[ ]` TODO |
 
@@ -99,9 +99,10 @@
 - [x] End-to-end smoke verified (GUI served at `/`, REST, WS turn stream); 49 tests passing
 
 ## Phase 6 — Voice
-- [ ] `friday/voice/tts.py` Piper (port, output + narration)
-- [ ] `friday/voice/stt.py` local push-to-talk (port, slimmed)
-- [ ] Barge-in via interrupt bus
+- [x] `friday/voice/tts.py` Piper (queue worker, sentence chunking, playback backend select, graceful no-op); speaks final answers + narration
+- [x] `friday/voice/stt.py` local push-to-talk (faster-whisper + sounddevice; start/stop + record_until_silence; low-signal filter)
+- [x] Barge-in (`stop_speech` WS msg → `tts.stop()`); STT endpoints (`/api/voice`, `/api/stt/record`)
+- [x] Wired into FridayService (Piper as narration + final-answer speech sink); `friday/tests/test_voice.py` (7); 56 tests passing
 
 ## Phase 7 — Module porting waves
 *(each module: convert params to JSON Schema, drop intent regex, add focused test)*
@@ -132,3 +133,4 @@
 - 2026-06-06 — Phase 3 complete: event bus + fanout, narration engine (model preamble spoken in-the-moment, context-aware long-task progress lines, opt-in tool-result narration, suppression on finalize). 43 tests passing. Starting Phase 4 (backend server).
 - 2026-06-06 — Phase 4 complete: FridayService + FastAPI/WebSocket backend (streaming turn channel, tool events, approval round-trip). Fixed an approval-deadlock (duplicate approval_request). 49 tests passing. Starting Phase 5 (modern GUI).
 - 2026-06-06 — Phase 5 complete: modern React+Tailwind GUI (streaming chat, live tool/progress timeline, voice orb, approval modal, settings), pywebview launcher serving the built bundle from FastAPI. Verified end-to-end. Starting Phase 6 (voice).
+- 2026-06-06 — Phase 6 complete: local Piper TTS (final answers + narration spoken), local push-to-talk STT (faster-whisper), barge-in, voice endpoints; all degrade gracefully without audio hardware. 56 tests passing. Starting Phase 7 (module porting).

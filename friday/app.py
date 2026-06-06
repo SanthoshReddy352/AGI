@@ -23,23 +23,8 @@ _URL = f"http://{_HOST}:{_PORT}"
 
 
 def _build_service() -> FridayService:
-    config = load_config()
-    speak = _make_speak(config)
-    return FridayService(config=config, speak=speak)
-
-
-def _make_speak(config: dict):
-    """Wire Piper TTS as the narration/speech sink (Phase 6). No-op if unavailable."""
-    if not (config.get("voice") or {}).get("enabled", True):
-        return lambda _t: None
-    try:
-        from friday.voice.tts import PiperTTS
-
-        tts = PiperTTS(config)
-        return tts.speak
-    except Exception as exc:  # noqa: BLE001
-        logger.info("[app] Piper TTS unavailable (%s); narration will be text-only", exc)
-        return lambda _t: None
+    # FridayService builds Piper TTS + local STT from config (graceful if absent).
+    return FridayService(config=load_config())
 
 
 def _serve(service: FridayService) -> None:

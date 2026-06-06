@@ -43,16 +43,61 @@ class FridayService:
         self.provider = provider or from_config(self.config)
         self.persona = load_persona(self.config.get("persona", "friday_core"))
 
+        # Voice: local Piper TTS (output + narration) and local STT (push-to-talk).
+        # Both degrade gracefully when binaries/models/hardware are absent.
+        self.tts = self._build_tts(self.config)
+        self._stt = None  # lazy (loads a whisper model on first use)
+        speak_fn = speak or (self.tts.speak if self.tts else (lambda _t: None))
+
         self.narration = NarrationEngine(
-            speak or (lambda _t: None),
+            speak_fn,
             progress_delays=tuple(conv.get("progress_delays_s", [4.0, 12.0, 25.0])),
         )
+        self._speak = speak_fn
 
         self.agent = Agent(
             self.provider, self.registry, self.db, self.persona,
             tool_loop_limit=conv.get("tool_loop_limit", 10),
             max_history_turns=conv.get("max_history_turns", 12),
         )
+
+    # -- voice -------------------------------------------------------------
+
+    @staticmethod
+    def _build_tts(config: dict):
+        if not (config.get("voice") or {}).get("enabled", True):
+            return None
+        try:
+            from friday.voice.tts import PiperTTS
+
+            return PiperTTS(config)
+        except Exception:  # noqa: BLE001
+            return None
+
+    @property
+    def stt(self):
+        if self._stt is None:
+            try:
+                from friday.voice.stt import LocalSTT
+
+                self._stt = LocalSTT(self.config)
+            except Exception:  # noqa: BLE001
+                self._stt = False
+        return self._stt or None
+
+    def stop_speaking(self) -> None:
+        if self.tts:
+            self.tts.stop()
+
+    def transcribe_once(self) -> str:
+        stt = self.stt
+        return stt.record_until_silence() if stt and stt.available() else ""
+
+    def _speak_final(self, event: str, payload: dict) -> None:
+        """Speak the final answer when a turn completes (preamble/progress are
+        already spoken by the narration engine)."""
+        if event == "turn_completed" and payload.get("content"):
+            self._speak(payload["content"])
 
     # -- introspection -----------------------------------------------------
 
@@ -84,8 +129,8 @@ class FridayService:
         on_token: Optional[TokenFn] = None,
         approval: Optional[ApprovalFn] = None,
     ) -> AgentResult:
-        """Run one turn. Events fan out to the narration engine and the given sink."""
-        emit = fanout(self.narration.handle_event, sink)
+        """Run one turn. Events fan out to narration, final-answer speech, and the sink."""
+        emit = fanout(self.narration.handle_event, self._speak_final, sink)
         # Temporarily attach the combined emit for this turn (thread-confined use).
         self.agent._emit = emit  # type: ignore[attr-defined]
         return self.agent.process_turn(text, session_id=session_id, on_token=on_token, approval=approval)

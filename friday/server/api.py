@@ -71,6 +71,22 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
     def new_session():
         return {"session_id": service.new_session()}
 
+    @app.get("/api/voice")
+    def voice_status():
+        return {
+            "tts": bool(service.tts and service.tts.available()),
+            "stt": bool(service.stt and service.stt.available()),
+        }
+
+    @app.post("/api/stt/record")
+    async def stt_record():
+        """Server-side push-to-talk: record from the local mic until silence,
+        return the transcript. Only useful when FRIDAY runs on the user's machine."""
+        import asyncio as _asyncio
+
+        text = await _asyncio.to_thread(service.transcribe_once)
+        return {"text": text}
+
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):
         await websocket.accept()
@@ -132,6 +148,8 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
                     q = approvals.pop(msg.get("id"), None)
                     if q is not None:
                         q.put(bool(msg.get("approved")))
+                elif mtype == "stop_speech":
+                    service.stop_speaking()  # barge-in
                 elif mtype == "ping":
                     push({"type": "pong"})
         except WebSocketDisconnect:
