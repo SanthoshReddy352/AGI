@@ -60,7 +60,7 @@ With the server running (`python -m friday --server` in another terminal):
 
 ```bash
 curl http://127.0.0.1:8000/api/health      # -> {"ok": true}
-curl http://127.0.0.1:8000/api/tools       # -> the full tool list (40 tools)
+curl http://127.0.0.1:8000/api/tools       # -> the full tool list (53 tools)
 ```
 
 A full chat turn goes over the WebSocket at `/ws` (the GUI uses it). Quick check
@@ -87,7 +87,7 @@ PY
 ## 5. Run the test suite (no API key needed)
 
 ```bash
-python -m pytest friday/tests/ -q       # 116 tests, all offline/mocked
+python -m pytest friday/tests/ -q       # 154 tests, all offline/mocked
 ```
 
 Per-wave tool tests:
@@ -97,11 +97,14 @@ python -m pytest friday/tests/test_tools_wave1.py   # file/shell/system/apps
 python -m pytest friday/tests/test_tools_wave2.py   # web/browser/network/security
 python -m pytest friday/tests/test_tools_wave3.py   # weather/smart_home/news/vision/docs/scheduler
 python -m pytest friday/tests/test_tools_wave4.py   # memory/delegate_task/persona
+python -m pytest friday/tests/test_comms.py         # Telegram/Discord + bridge
+python -m pytest friday/tests/test_mcp.py           # MCP client (fake stdio server)
+python -m pytest friday/tests/test_reminder_runner.py  # due-time parsing + firing
 ```
 
 ---
 
-## What works today (40 tools)
+## What works today (53 tools)
 
 | Area | Tools |
 |------|-------|
@@ -118,9 +121,18 @@ python -m pytest friday/tests/test_tools_wave4.py   # memory/delegate_task/perso
 | Scheduler | `add_reminder` `list_reminders` `remove_reminder` |
 | Memory | `remember_fact` `recall_facts` `forget_fact` `search_conversations` |
 | Agent | `delegate_task` (research/sub-tasks) `switch_persona` `list_personas` |
+| Tasks/Goals | `add_task` `list_tasks` `complete_task` `remove_task` · `add_goal` `list_goals` `update_goal_progress` `remove_goal` |
+| Focus | `start_focus` `focus_status` `end_focus` |
+| Comms‡ | `send_notification` (+ inbound Telegram chat bridge) |
+| MCP§ | `mcp_list_servers` + `mcp_<server>_<tool>` per connected server |
 
 \* off until `security.lab_mode: true` + `authorized_scopes` in config.yaml.
 † off until `smart_home.url` + `HASS_TOKEN` are set.
+‡ off until `FRIDAY_TELEGRAM_TOKEN`+`FRIDAY_TELEGRAM_CHAT_ID` or `FRIDAY_DISCORD_WEBHOOK_URL`.
+§ only when `mcp.servers` are configured in config.yaml.
+
+Reminders with a parseable time ("remind me in 10 minutes…") fire in the
+background (spoken + sent to Telegram/Discord if configured).
 
 ## Optional system tools (only if you use that feature)
 

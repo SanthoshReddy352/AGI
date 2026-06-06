@@ -38,6 +38,11 @@ class PersonaBody(BaseModel):
     id: str
 
 
+class OnboardingBody(BaseModel):
+    name: str = ""
+    facts: dict = {}
+
+
 def create_app(service: Optional[FridayService] = None) -> FastAPI:
     service = service or FridayService()
     app = FastAPI(title="FRIDAY v2")
@@ -70,6 +75,14 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
     @app.post("/api/session")
     def new_session():
         return {"session_id": service.new_session()}
+
+    @app.get("/api/onboarding")
+    def onboarding_status():
+        return service.onboarding_status()
+
+    @app.post("/api/onboarding")
+    def complete_onboarding(body: OnboardingBody):
+        return service.complete_onboarding(body.name, body.facts)
 
     @app.get("/api/voice")
     def voice_status():

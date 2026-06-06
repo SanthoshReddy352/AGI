@@ -188,6 +188,24 @@ class FridayService:
     def new_session(self) -> str:
         return self.agent.new_session()
 
+    # -- onboarding (web first-run) ----------------------------------------
+
+    def onboarding_status(self) -> dict:
+        """Web-native re-imagining of the v1 voice greeter: the GUI shows a
+        welcome card when FRIDAY doesn't yet know the user's name."""
+        name = self.db.get_fact("name")
+        return {"needed": not bool(name), "name": name}
+
+    def complete_onboarding(self, name: str = "", facts: Optional[dict] = None) -> dict:
+        name = (name or "").strip()
+        if name:
+            self.db.save_fact("name", name, category="identity")
+        for key, value in (facts or {}).items():
+            key, value = str(key).strip(), str(value).strip()
+            if key and value:
+                self.db.save_fact(key, value, category="onboarding")
+        return self.onboarding_status()
+
     # -- turn driving ------------------------------------------------------
 
     def run_turn(
