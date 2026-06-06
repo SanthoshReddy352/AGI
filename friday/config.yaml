@@ -68,9 +68,14 @@ security:
 #     bedroom lights: light.bedroom_main
 #     ac: climate.living_room_ac
 
-# ── Scheduler (reminder store) ─────────────────────────────────────
+# ── Scheduler / tasks / goals (persisted stores) ───────────────────
+# Channel tokens for comms (Telegram/Discord) live in .env, not here.
 # scheduler:
 #   store_path: data/reminders.json
+# tasks:
+#   store_path: data/tasks.json
+# goals:
+#   store_path: data/goals.json
 
 # ── Logging ────────────────────────────────────────────────────────
 logging:

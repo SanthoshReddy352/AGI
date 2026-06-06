@@ -113,9 +113,9 @@
 
 ### Phase 7 — not yet ported (beyond the original wave plan)
 The waves above cover the god-doc's value-priority list. These v1 modules were **not** in that plan and remain unported — tracked here for the "port everything" goal (candidate **Wave 5+**):
-- [ ] **comms** — Telegram + Discord channels (`send_notification`, inbound bot bridge). *User-requested.*
-- [ ] **task_manager** — task/to-do CRUD (richer than the scheduler reminder store)
-- [ ] **goals** — goal tracking + progress
+- [x] **comms** — `friday/comms/` (Telegram + Discord, stdlib, env-gated) + `send_notification` tool + Telegram inbound bridge wired into the service (chat with FRIDAY from your phone). `test_comms.py` (12).
+- [x] **task_manager** — `add_task`/`list_tasks`/`complete_task`/`remove_task` (persisted `data/tasks.json`). `test_tools_tasks_goals.py`.
+- [x] **goals** — `add_goal`/`list_goals`/`update_goal_progress`/`remove_goal` (persisted `data/goals.json`).
 - [ ] **mcp_client** — connect external MCP tool servers
 - [ ] **focus_session**, **workspace_agent**, **world_monitor**, **awareness** — proactive/ambient flows
 - [ ] **greeter / onboarding** — first-run UX (may be re-imagined for the web GUI rather than ported 1:1)

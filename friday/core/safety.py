@@ -57,6 +57,8 @@ _DESTRUCTIVE = {
     "ha_turn_on", "ha_turn_off", "ha_set_temperature", "remove_reminder",
     # memory deletion
     "forget_fact",
+    # task/goal deletion
+    "remove_task", "remove_goal",
 }
 
 

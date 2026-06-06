@@ -72,6 +72,24 @@ class FridayService:
         if registry is None:
             register_agent_tools(self.registry, self.agent, self.provider, self.db)
 
+        # Wave 5: messaging channels (Telegram/Discord). The Telegram inbound
+        # bridge routes phone messages through a full turn. Off unless tokens
+        # are set; skipped under injected registry (tests) to avoid net threads.
+        self.comms = self._build_comms() if registry is None else None
+        if self.comms is not None and self.comms.telegram.available:
+            self.comms.start_inbound(lambda text: self.run_turn(text).content)
+
+    # -- comms -------------------------------------------------------------
+
+    @staticmethod
+    def _build_comms():
+        try:
+            from friday.comms import CommsManager
+
+            return CommsManager()
+        except Exception:  # noqa: BLE001
+            return None
+
     # -- voice -------------------------------------------------------------
 
     @staticmethod
