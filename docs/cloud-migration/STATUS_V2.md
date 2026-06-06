@@ -5,7 +5,7 @@
 > listed here. The canonical plan ("god document") is
 > [`FRIDAY_V2_GOD_DOC.md`](./FRIDAY_V2_GOD_DOC.md).
 
-**Last updated:** 2026-06-06 (Phase 2 complete)
+**Last updated:** 2026-06-06 (Phase 3 complete)
 
 ## Legend
 
@@ -20,8 +20,8 @@
 | 0 | Safety net & docs | `[x]` DONE |
 | 1 | Provider layer | `[x]` DONE |
 | 2 | Agent core | `[x]` DONE |
-| 3 | Model-narrated progress | `[~]` IN-PROGRESS |
-| 4 | Backend server | `[ ]` TODO |
+| 3 | Model-narrated progress | `[x]` DONE |
+| 4 | Backend server | `[~]` IN-PROGRESS |
 | 5 | Modern GUI | `[ ]` TODO |
 | 6 | Voice (Piper TTS + STT) | `[ ]` TODO |
 | 7 | Module porting waves | `[ ]` TODO |
@@ -75,11 +75,11 @@
 - [x] **All 33 friday tests passing**
 
 ## Phase 3 — Model-narrated progress
-- [ ] `friday/core/events.py` (port event bus)
-- [ ] `friday/core/narration.py`: spoken preamble alongside tool calls
-- [ ] Context-aware long-task progress lines (timer pattern, real context)
-- [ ] Tool-step narration on `tool_finished`
-- [ ] `friday/tests/test_narration.py`
+- [x] `friday/core/events.py` (EventBus pub/sub + `fanout` multi-sink emit)
+- [x] `friday/core/narration.py`: spoken model preamble alongside tool calls
+- [x] Context-aware long-task progress lines (timer pattern, tool/args-aware, pluggable `phrase_generator`)
+- [x] Tool-step narration on `tool_finished` (opt-in) + suppression after turn finalized
+- [x] `friday/tests/test_narration.py` (10 tests); 43 friday tests passing
 
 ## Phase 4 — Backend server
 - [ ] `friday/server/api.py` FastAPI app + REST (config/persona/tools)
@@ -127,3 +127,4 @@
 - 2026-06-06 — Phase 0 complete: git initialized, baseline tag `v1-pre-rebuild`, CLAUDE.md migration pointer added, baseline metrics recorded.
 - 2026-06-06 — Phase 1 complete: full provider layer (native Anthropic/OpenAI/Google + generic OpenAI-compat for opencode/lmstudio/ollama/custom), normalized `LLMResponse`/`ToolCall`, native tool-calling + streaming, config-driven `ProviderChain` fallback, v2 config loader. 21 tests passing.
 - 2026-06-06 — Phase 2 complete: agent core — ToolRegistry, single-SQLite memory (turns/facts FTS5/audit), persona→prompt, the one agent loop (tool calling + streaming + events + bounded loop), memory built-in tools. 33 tests passing total. Starting Phase 3 (model-narrated progress).
+- 2026-06-06 — Phase 3 complete: event bus + fanout, narration engine (model preamble spoken in-the-moment, context-aware long-task progress lines, opt-in tool-result narration, suppression on finalize). 43 tests passing. Starting Phase 4 (backend server).
