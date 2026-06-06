@@ -1,0 +1,27 @@
+# FRIDAY STT phonetic-correction map.
+#
+# Each entry corrects a full-token STT misrecognition observed in real
+# FRIDAY voice logs. The user can edit this file without touching code.
+#
+# Format:
+#   "stt_heard": "correct_word_or_phrase"
+#
+# Rules (enforced by core/text_normalize.py):
+#   - Keys must NOT be valid English words in the relevant domain.
+#     Add only genuine STT artefacts you have personally observed.
+#   - Substitution is whole-token (word-boundary anchored) — never
+#     substring. "noree" won't accidentally mangle "noreaster".
+#   - Keys are matched case-insensitively; case of the leading character
+#     is preserved in the output (e.g. "Nolo-re" → "Nellore").
+#   - One entry per line. Keep sorted by key within each group.
+
+substitutions:
+  # ── Place names ─────────────────────────────────────────────────────
+  # Observed 2026-05-22: Whisper renders "Nellore" as "nolo-re" or
+  # "nolore" in several voice sessions. (Source: terminal log 10:10.)
+  nolo-re: nellore
+  nolore: nellore
+  nellor: nellore
+
+  # ── Common proper-noun mis-transcriptions ───────────────────────────
+  # Add more here as you encounter them. Cite a log date if possible.

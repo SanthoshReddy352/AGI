@@ -1,0 +1,8 @@
+domain: screenshot
+cases:
+  - { say: "take a screenshot", tool: take_screenshot }
+  - { say: "capture the screen", tool: take_screenshot }
+  - { say: "grab a screenshot", tool: take_screenshot }
+  - { say: "take a screenshot of my screen", tool: take_screenshot }
+  # negatives
+  - { say: "what is a screenshot", no_match: true }

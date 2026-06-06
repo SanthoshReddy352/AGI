@@ -1,0 +1,21 @@
+domain: environment
+cases:
+  # refresh_app_index
+  - { say: "rescan my apps", tool: refresh_app_index }
+  - { say: "rescan apps", tool: refresh_app_index }
+  - { say: "refresh applications", tool: refresh_app_index }
+  - { say: "reindex my apps", tool: refresh_app_index }
+  - { say: "rebuild the app index", tool: refresh_app_index }
+  - { say: "update the application index", tool: refresh_app_index }
+  # refresh_file_index
+  - { say: "reindex my files", tool: refresh_file_index }
+  - { say: "rescan filesystem", tool: refresh_file_index }
+  - { say: "rebuild the file index", tool: refresh_file_index }
+  - { say: "refresh file index", tool: refresh_file_index }
+  # search_indexed_files: "find/search for [the] [indexed] file <name.ext>" or
+  # "... file called <name>" — stricter than search_file's fuzzy disk matching.
+  - { say: "find the file report.pdf", tool: search_indexed_files, args: { query: "report.pdf" } }
+  - { say: "search for the file budget.xlsx", tool: search_indexed_files }
+  - { say: "find the file called notes", tool: search_indexed_files }
+  # negatives
+  - { say: "what files should i back up", no_match: true }

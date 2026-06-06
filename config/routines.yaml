@@ -1,0 +1,22 @@
+# P3.9 — Routine scheduler config.
+#
+# Each routine fires `command` as if the user spoke it. Use either:
+#   cron:             5-field cron expression (min hour dom mon dow)
+#   interval_seconds: integer — fire every N seconds
+#
+# Optional:
+#   quiet_hours: { start: 22, end: 7 }   # don't fire between 22:00 and 07:00
+#
+# Empty by default — uncomment to enable.
+
+routines: []
+
+# routines:
+#   - name: morning_briefing
+#     cron: "0 8 * * *"
+#     command: "give me my morning briefing"
+#     quiet_hours: { start: 22, end: 7 }
+#
+#   - name: every_two_minutes_smoketest
+#     interval_seconds: 120
+#     command: "ping"

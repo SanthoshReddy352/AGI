@@ -1,0 +1,12 @@
+domain: screen_lock
+cases:
+  - { say: "lock screen", tool: lock_screen }
+  - { say: "lock the screen", tool: lock_screen }
+  - { say: "lock my screen", tool: lock_screen }
+  - { say: "lock yourself", tool: lock_screen }
+  - { say: "lock friday", tool: lock_screen }
+  - { say: "unlock screen", tool: unlock_screen }
+  - { say: "unlock the screen", tool: unlock_screen }
+  - { say: "unlock with pin 1234", tool: unlock_screen }
+  # negatives — "lock screen" must beat a help query, never route help
+  - { say: "how do screen locks work on linux", no_match: true }

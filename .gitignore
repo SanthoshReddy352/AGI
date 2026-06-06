@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+libs_backup
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+
+# Project Specific
+logs/*.log
+data/*.db*
+data/*.sqlite3*
+data/browser-profile/
+data/_archive_*/
+data/chroma/
+# P2.2: canonical DB is data/friday.db; core/data/ was the accidental duplicate
+core/data/
+models/
+piper/
+# Redistributable Piper binary tarball (~26MB, re-downloaded by setup)
+piper_linux_x86_64.tar.gz
+tmp_plan_folder_ctx*
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+#logs
+logs/*.log
+logs/
+#env
+.env
+
+scratch/*
+# Claude Code ephemeral worktrees (never commit)
+.claude/worktrees/
+
+# Generated RAG knowledge graph — rebuild locally with /graphify (~80 MB, regenerable)
+graphify-out/
+
+# AI-interaction dev logs — written locally per CLAUDE.md, kept out of the public repo
+responses/
+plan/
+
+# Ad-hoc scratch notes (not part of the project)
+notes.txt
+notes.md
+friday_notes.md
+full_after.txt
+
+# Loose RAG test PDFs dropped at repo root (real fixtures live under tests/)
+/RAG Testing Dataset_ Aerospace Engineering.pdf
+/RAG Testing File Generation - Google Gemini.pdf

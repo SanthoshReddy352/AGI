@@ -1,0 +1,19 @@
+{% include "_shared.j2" %}
+
+Summarize the structured tool observation for the planner. Do not infer facts that are not in the observation. Return JSON only.
+
+Schema:
+{
+  "step_id": "",
+  "capability": "",
+  "status": "success | failure | partial | timeout",
+  "summary": "",
+  "structured_data": {},
+  "errors": [],
+  "next_step_hints": []
+}
+
+Observation:
+{{ observation_json }}
+
+JSON:

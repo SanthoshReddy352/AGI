@@ -1,0 +1,16 @@
+domain: brightness
+cases:
+  - { say: "set brightness to 60", tool: set_brightness }
+  - { say: "set the brightness to 60", tool: set_brightness }
+  - { say: "change brightness to 40", tool: set_brightness }
+  - { say: "make the brightness 80", tool: set_brightness }
+  - { say: "put brightness at 25", tool: set_brightness }
+  - { say: "turn brightness up to 90", tool: set_brightness }
+  - { say: "brightness 80", tool: set_brightness }
+  - { say: "set 80 brightness", tool: set_brightness }
+  - { say: "set brightness to max", tool: set_brightness }
+  - { say: "set brightness to fifty", tool: set_brightness }
+  - { say: "dim the screen to 20", tool: set_brightness }
+  # negatives
+  - { say: "what is the brightness of the sun", no_match: true }
+  - { say: "the stage lights were too bright", not: set_brightness }

@@ -1,0 +1,56 @@
+workflow_name: file_create_with_content
+description: >
+  Track 5.2d (foundation): the new home for the FileWorkflow state
+  machine — bare create → ask whether to write → branch into
+  dictate-or-generate → ask for topic if generating → run the
+  capability that writes the file. The Issue-10 mid-flow target
+  switch ("save that to reverse.py" while the workflow target is
+  ideas.md) is the `cancel_when:` predicate: when the user names a
+  filename that differs from the active target, the workflow drops
+  itself so normal routing reparses the new intent.
+
+  This template is wired up but not yet the canonical path —
+  `modules/system_control/file_workspace.py` still seeds the legacy
+  `pending_slots: ["write_confirmation"]` flow that `FileWorkflow`
+  resumes. Retirement of `FileWorkflow` + `BrowserMediaWorkflow` +
+  `WorkflowOrchestrator.continue_active`'s legacy slot-fill is
+  scheduled for the 5.2d-retire follow-up sub-track; see STATUS.md.
+version: "0.1.0"
+domain: file
+tags: [file, slot-fill, foundation]
+
+required_inputs: [filename]
+optional_inputs: [folder, extension, target_path]
+
+# Track 5.2c: capability-backed cancel predicate. When the user names a
+# different filename mid-flow the workflow releases itself (Issue 10).
+cancel_when: detect_new_filename
+cancel_response: ""
+
+steps:
+  - step_id: ask_write
+    ask: "Would you like me to write anything in it?"
+    slot: write_confirmation
+    # No `extract_with:` — raw user reply (e.g. "yes" / "no") fills the
+    # slot. The branching steps below use that raw value via `slot:`
+    # predicates.
+
+  - step_id: ask_source
+    when: "slot:write_confirmation"   # only ask if user said something
+    ask: "Will you dictate the content, or should I generate it for you?"
+    slot: content_source
+
+  - step_id: ask_topic
+    when: "slot:content_source"
+    ask: "What topic should I write about?"
+    slot: content_topic
+
+  - step_id: write_file
+    when: "slot:content_topic"
+    capability: manage_file
+    args:
+      action: write
+      filename: "{{filename}}"
+      folder: "{{folder|default:}}"
+      extension: "{{extension|default:}}"
+      content: "{{content_topic}}"

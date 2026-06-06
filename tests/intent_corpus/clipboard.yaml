@@ -1,0 +1,6 @@
+domain: clipboard
+cases:
+  - { say: "what's in my clipboard", tool: get_clipboard }
+  - { say: "read my clipboard", tool: get_clipboard }
+  - { say: "show my clipboard", tool: get_clipboard }
+  - { say: "copy \"hello world\" to my clipboard", tool: set_clipboard }

@@ -1,0 +1,34 @@
+# Placeholder — referenced capabilities arrive in Phase 5.
+workflow_name: compare_two_scan_results
+description: >
+  Compare two previously-stored scan artifacts and produce a structured
+  diff plus a markdown comparison summary.
+version: 0.1.0
+domain: cybersecurity_lab
+tags: [diff, deterministic, planned]
+required_inputs:
+  - artifact_a
+  - artifact_b
+optional_inputs: []
+preconditions:
+  - artifact_a != artifact_b
+permission_checks: []
+steps:
+  - step_id: s1
+    capability: compare_scan_results
+    args:
+      artifact_a: "{{artifact_a}}"
+      artifact_b: "{{artifact_b}}"
+      mode: diff
+    side_effect_level: read
+  - step_id: s2
+    capability: security_report_generate
+    depends_on: [s1]
+    args:
+      style: comparison_summary
+    side_effect_level: write
+    requires_confirmation: true
+stop_conditions: []
+final_report:
+  format: markdown
+  sections: [a, b, added, removed, changed]

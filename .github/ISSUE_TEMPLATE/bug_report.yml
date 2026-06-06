@@ -1,0 +1,77 @@
+name: Bug report
+description: Something FRIDAY did wrong — a misroute, a crash, a wrong answer.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug! The more precisely you describe **what you
+        said** and **what FRIDAY did**, the faster we can reproduce it.
+
+        > For security vulnerabilities, do **not** open an issue — see
+        > [SECURITY.md](../../blob/main/SECURITY.md).
+  - type: textarea
+    id: said
+    attributes:
+      label: What you said / did
+      description: The exact phrasing you spoke or typed, or the steps you took.
+      placeholder: |
+        "Hey Friday, set brightness to fifty"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      placeholder: Brightness changes to 50%.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+      description: Include FRIDAY's spoken/printed reply if relevant.
+      placeholder: It replied "Brightness set to 60" but nothing changed.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log excerpt
+      description: |
+        Paste the relevant lines from `logs/friday.log`. The `[ROUTE]` line for
+        the affected turn is especially useful for routing bugs.
+      render: text
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - Windows
+        - macOS (unsupported, best-effort)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `git rev-parse --short HEAD`, or the release tag.
+      placeholder: c5514fe
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.11"
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this isn't a duplicate.
+          required: true
+        - label: I'm on a supported Python version (3.10–3.13).
+          required: true

@@ -1,0 +1,66 @@
+name: Feature request
+description: Propose a new capability or behavior — describe it by the words you'd speak.
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        FRIDAY is **phrasing-first**: a feature is defined by what the user
+        says and what FRIDAY should do in response. Lead with that — the
+        implementation can follow.
+  - type: textarea
+    id: phrasing
+    attributes:
+      label: What you'd say
+      description: The natural phrasings you'd speak or type to trigger this.
+      placeholder: |
+        "Hey Friday, dim the screen to reading brightness"
+        "set brightness to night mode"
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What FRIDAY should do
+      placeholder: Set brightness to a low preset (~20%) and confirm out loud.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this is useful
+      description: The problem it solves or the workflow it improves.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of FRIDAY does this touch?
+      options:
+        - Voice I/O
+        - System control
+        - Document intelligence
+        - Vision
+        - Online skills (browser/search/news/weather)
+        - Productivity (reminders/notes/tasks/goals/focus)
+        - Memory / personas
+        - Routing / intent recognition
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Other phrasings, existing capabilities that almost do this, etc.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this isn't already requested.
+          required: true
+        - label: I've read CONTRIBUTING.md — new capabilities need an intent pattern + test.
+          required: false

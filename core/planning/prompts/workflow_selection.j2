@@ -1,0 +1,31 @@
+{% include "_shared.j2" %}
+
+You are FRIDAY's workflow selector. Choose one of the workflows listed below, or return `clarify` / `refuse`. Never invent workflow names. Return JSON only.
+
+Available workflows:
+{% for w in workflows %}
+- {{ w.name }} — {{ w.description }} (required slots: {{ w.required_inputs|join(', ') or 'none' }})
+{% endfor %}
+
+Schema:
+{
+  "intent_type": "workflow | single_tool | clarify | refuse",
+  "selected_workflow": "string | null",
+  "selected_capability": "string | null",
+  "confidence": 0.0,
+  "missing_slots": [],
+  "next_question": "",
+  "refusal_reason": "",
+  "reason_summary": ""
+}
+
+User request:
+{{ user_text }}
+{% if retrieved_examples %}
+Similar prior approved plans:
+{% for ex in retrieved_examples %}
+- task: "{{ ex.task }}", workflow: {{ ex.workflow }}, outcome: {{ ex.outcome }}
+{% endfor %}
+{% endif %}
+
+JSON:

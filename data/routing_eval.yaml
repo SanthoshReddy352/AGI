@@ -1,0 +1,64 @@
+# Routing eval set — Adaptive Intent Recognition (Phase 1).
+#
+# A labelled (utterance -> expected tool) set used by
+# tests/routing/test_routing_quality.py to measure the EmbeddingRouter's
+# top-1 accuracy over the curated `data/tool_catalog.yaml` phrases. These
+# are deliberately PARAPHRASES that are NOT verbatim catalog phrases — the
+# point is to prove the embedding tier catches "how the user actually
+# talks", and to give us a ruler when we tune DISPATCH_THRESHOLD or expand
+# the catalog.
+#
+# Add a row here whenever you discover a phrasing FRIDAY mis-routed. Keep
+# the expected tool name in sync with `data/tool_catalog.yaml`.
+#
+# Schema:
+#   cases:
+#     - say: "<utterance>"
+#       tool: "<expected capability name>"
+
+cases:
+  # memory & profile
+  - { say: "what do you actually know about me", tool: show_memories }
+  - { say: "jot this down so you remember it", tool: save_note }
+  - { say: "what notes have I left for myself", tool: read_notes }
+  - { say: "look back through our old chats", tool: search_conversations }
+
+  # system & environment
+  - { say: "how's the laptop doing right now", tool: get_system_status }
+  - { say: "how much charge is left", tool: get_battery }
+  - { say: "is my memory maxed out", tool: get_cpu_ram }
+  - { say: "grab a picture of my screen", tool: take_screenshot }
+  - { say: "make the display dimmer", tool: set_brightness }
+  - { say: "secure my computer I'm stepping away", tool: lock_screen }
+  - { say: "what's the weather looking like outside", tool: get_weather }
+
+  # files
+  - { say: "pull up that document I was editing", tool: open_file }
+  - { say: "give me the gist of this report", tool: summarize_file }
+  - { say: "hunt down a file by its name", tool: search_indexed_files }
+
+  # web & research
+  - { say: "look that up on the internet for me", tool: web_search }
+  - { say: "dig into this topic in depth", tool: research_topic }
+  - { say: "what's the short version from wikipedia", tool: wikipedia_summary }
+  - { say: "any recent papers on this", tool: arxiv_search }
+
+  # news & email
+  - { say: "catch me up on today's headlines", tool: get_news_briefing }
+  - { say: "anything new in my mailbox", tool: check_unread_emails }
+  - { say: "what's the latest tech news", tool: get_technology_news }
+
+  # vision
+  - { say: "what's happening on my screen right now", tool: summarize_screen }
+  - { say: "read out the words in this picture", tool: read_text_from_image }
+
+  # goals & productivity
+  - { say: "what am I trying to accomplish", tool: list_goals }
+  - { say: "help me concentrate for a while", tool: start_focus_session }
+
+  # time
+  - { say: "remind me what day it is", tool: get_date }
+  - { say: "what's the hour", tool: get_time }
+
+  # clipboard
+  - { say: "what did I just copy", tool: get_clipboard }

@@ -1,0 +1,40 @@
+workflow_name: lab_network_inventory
+description: >
+  Read-only inventory of an authorized lab subnet. Discovers live hosts
+  with a ping sweep, then enumerates services on each found host.
+version: 1.0.0
+domain: cybersecurity_lab
+tags: [inventory, lab, authorized, read_only]
+required_inputs:
+  - target_subnet
+optional_inputs:
+  - scan_profile
+preconditions:
+  - target_scope.network_scope == 'lab'
+  - authorization.confirmed == true
+permission_checks:
+  - authorized_scope
+steps:
+  - step_id: s1
+    capability: ping_sweep
+    args:
+      subnet: "{{target_subnet}}"
+    side_effect_level: read
+    expected_observation: live_hosts
+    success_condition: "observation.status in ['success','partial']"
+  - step_id: s2
+    capability: host_service_scan
+    depends_on: [s1]
+    args:
+      # Phase 5 will resolve ${s1.live_hosts.first} from structured Observations.
+      # Until then, the runtime injects s1's text output under the key 's1'.
+      target: "${s1.first_live_host}"
+      profile: "{{scan_profile|default:quick}}"
+    side_effect_level: read
+    expected_observation: services_by_host
+stop_conditions:
+  - user_cancelled
+  - max_steps_reached
+final_report:
+  format: markdown
+  sections: [scope, live_hosts, services, notes]

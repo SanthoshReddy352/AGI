@@ -1,0 +1,20 @@
+# FRIDAY website policy — P3.17
+#
+# blocked_domains: FRIDAY will refuse to fetch these domains.
+# allowed_url_prefixes: optional whitelist (empty = allow all non-blocked).
+#
+# Domain matching is suffix-based: "example.com" also blocks "sub.example.com".
+# Do NOT add IP ranges here — private IP blocking is hardcoded in url_safety.py.
+
+blocked_domains:
+  # Known malware / phishing infrastructure
+  - malware.wicar.org
+  - eicar.org
+
+  # Add site-specific blocks here as needed. Example:
+  # - ads.doubleclick.net
+
+allowed_url_prefixes: []
+  # Uncomment and populate to restrict FRIDAY to an allowlist:
+  # - https://en.wikipedia.org/
+  # - https://arxiv.org/
