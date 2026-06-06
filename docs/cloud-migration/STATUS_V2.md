@@ -5,7 +5,7 @@
 > listed here. The canonical plan ("god document") is
 > [`FRIDAY_V2_GOD_DOC.md`](./FRIDAY_V2_GOD_DOC.md).
 
-**Last updated:** 2026-06-06 (Phase 1 complete)
+**Last updated:** 2026-06-06 (Phase 2 complete)
 
 ## Legend
 
@@ -19,8 +19,8 @@
 |------|-------|--------|
 | 0 | Safety net & docs | `[x]` DONE |
 | 1 | Provider layer | `[x]` DONE |
-| 2 | Agent core | `[~]` IN-PROGRESS |
-| 3 | Model-narrated progress | `[ ]` TODO |
+| 2 | Agent core | `[x]` DONE |
+| 3 | Model-narrated progress | `[~]` IN-PROGRESS |
 | 4 | Backend server | `[ ]` TODO |
 | 5 | Modern GUI | `[ ]` TODO |
 | 6 | Voice (Piper TTS + STT) | `[ ]` TODO |
@@ -65,13 +65,14 @@
 - [x] `friday/tests/test_providers.py` — **21 tests passing**
 
 ## Phase 2 — Agent core
-- [ ] `friday/core/tools.py` ToolRegistry (native defs from capability descriptors)
-- [ ] `friday/core/memory.py` single SQLite (sessions/turns/facts FTS5/audit)
-- [ ] `friday/core/persona.py` (port persona_manager YAML→prompt)
-- [ ] `friday/core/agent.py` the one loop (generate→tools→loop→final, streaming)
-- [ ] `remember_fact` / `recall_facts` tools
-- [ ] `friday/tests/test_agent_loop.py`
-- [ ] `friday/tests/test_memory.py`
+- [x] `friday/core/tools.py` ToolRegistry (`Tool`/`ToolResult`/`@tool`; neutral defs + approval gate)
+- [x] `friday/core/memory.py` single SQLite (sessions/turns/facts standalone-FTS5/audit, thread-safe)
+- [x] `friday/core/persona.py` (port persona YAML→prompt + agent/narration preamble + USER_FACTS) + `friday/personas/friday_core.yaml`
+- [x] `friday/core/agent.py` the one loop (generate→tools→loop→final, streaming, bounded, event emit)
+- [x] `remember_fact` / `recall_facts` tools (`friday/core/builtins.py`)
+- [x] `friday/tests/test_agent_loop.py` (7 tests)
+- [x] `friday/tests/test_memory.py` (6 tests)
+- [x] **All 33 friday tests passing**
 
 ## Phase 3 — Model-narrated progress
 - [ ] `friday/core/events.py` (port event bus)
@@ -124,4 +125,5 @@
 ## Change log
 - 2026-06-06 — Migration kicked off. God doc + status tracker created.
 - 2026-06-06 — Phase 0 complete: git initialized, baseline tag `v1-pre-rebuild`, CLAUDE.md migration pointer added, baseline metrics recorded.
-- 2026-06-06 — Phase 1 complete: full provider layer (native Anthropic/OpenAI/Google + generic OpenAI-compat for opencode/lmstudio/ollama/custom), normalized `LLMResponse`/`ToolCall`, native tool-calling + streaming, config-driven `ProviderChain` fallback, v2 config loader. 21 tests passing. Starting Phase 2 (agent core).
+- 2026-06-06 — Phase 1 complete: full provider layer (native Anthropic/OpenAI/Google + generic OpenAI-compat for opencode/lmstudio/ollama/custom), normalized `LLMResponse`/`ToolCall`, native tool-calling + streaming, config-driven `ProviderChain` fallback, v2 config loader. 21 tests passing.
+- 2026-06-06 — Phase 2 complete: agent core — ToolRegistry, single-SQLite memory (turns/facts FTS5/audit), persona→prompt, the one agent loop (tool calling + streaming + events + bounded loop), memory built-in tools. 33 tests passing total. Starting Phase 3 (model-narrated progress).
