@@ -9,22 +9,31 @@ default browser if pywebview is unavailable.
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 from contextlib import suppress
 
 from friday.config import load_config
-from friday.core.logger import logger
+from friday.core.logger import configure_logging, logger
 from friday.service import FridayService
 
 _HOST = "127.0.0.1"
-_PORT = 8000
+_PORT = int(os.environ.get("PORT", 8000))
 _URL = f"http://{_HOST}:{_PORT}"
 
 
 def _build_service() -> FridayService:
     # FridayService builds Piper TTS + local STT from config (graceful if absent).
-    return FridayService(config=load_config())
+    config = load_config()
+    log_cfg = config.get("logging") or {}
+    configure_logging(
+        level=log_cfg.get("level"),
+        log_file=log_cfg.get("file", "logs/friday.log"),
+        to_file=bool(log_cfg.get("to_file", True)),
+    )
+    logger.info("[app] starting FRIDAY v2 (log level=%s)", logger.level and __import__("logging").getLevelName(logger.level))
+    return FridayService(config=config)
 
 
 def _serve(service: FridayService) -> None:
@@ -63,7 +72,9 @@ def main(server_only: bool = False) -> None:
     try:
         import webview
 
-        webview.create_window("FRIDAY", _URL, width=1100, height=760, min_size=(720, 560))
+        from friday.config import assistant_name
+        webview.create_window(assistant_name(service.config), _URL,
+                              width=1100, height=760, min_size=(720, 560))
         webview.start()
     except Exception as exc:  # noqa: BLE001
         logger.info("[app] pywebview unavailable (%s); opening browser", exc)

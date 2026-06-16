@@ -2,29 +2,89 @@
 # The brain is an API call: native Anthropic/Google/OpenAI, or any
 # OpenAI-compatible endpoint (opencode / LM Studio / Ollama / custom).
 
+# ── Assistant identity ─────────────────────────────────────────────
+# THE one place to rename the assistant. Set `name` to anything you like
+# (e.g. "Jarvis", "Aria", "Max") and it changes everywhere — the system
+# prompt, the web UI, the voice, and the messaging bridges. You can also
+# override it without editing this file via the ASSISTANT_NAME env var.
+assistant:
+  name: Heaven
+
 # ── Provider (the brain) ───────────────────────────────────────────
 provider:
-  type: anthropic                 # anthropic | openai | google | openai_compat | opencode | lmstudio | ollama
-  model: claude-sonnet-4-6
-  api_key_env: ANTHROPIC_API_KEY  # secrets live in .env, never here
+  type: opencode                 # anthropic | openai | google | openai_compat | opencode | lmstudio | ollama
+  model: big-pickle
+  api_key_env: OPENAI_API_KEY  # secrets live in .env, never here
   max_tokens: 4096
   temperature: 0.3
   timeout_s: 60
+  base_url: https://opencode.ai/zen/v1
 
   # Ordered fallbacks tried when the primary is unavailable/errors.
   fallback:
-    - type: openai
-      model: gpt-4o-mini
+    - type: opencode
+      model: deepseek-v4-flash-free
       api_key_env: OPENAI_API_KEY
     # - type: ollama              # local server via OpenAI-compat (no key)
     #   model: llama3.1
     # - type: openai_compat       # any custom endpoint
     #   model: your-model
-    #   base_url: https://your-endpoint/v1
+      base_url: https://opencode.ai/zen/v1
+    #   api_key_env: FRIDAY_API_KEY
+
+    - type: opencode
+      model: nemotron-3-ultra-free
+      api_key_env: OPENAI_API_KEY
+    # - type: ollama              # local server via OpenAI-compat (no key)
+    #   model: llama3.1
+    # - type: openai_compat       # any custom endpoint
+    #   model: your-model
+      base_url: https://opencode.ai/zen/v1
     #   api_key_env: FRIDAY_API_KEY
 
 # ── Persona ────────────────────────────────────────────────────────
 persona: friday_core              # loaded from personas/<id>.yaml
+
+# ── Skills (procedural memory / learning loop, ported from hermes) ──
+skills:
+  user_dir: ~/.friday/skills      # where create_skill writes learned skills
+  allow_inline_shell: false       # expand !`cmd` snippets inside SKILL.md (off by default)
+
+# ── Memory (curated notes + cross-session recall, ported from hermes) ─
+memory:
+  notes_dir: data/memory          # USER.md + MEMORY.md the agent curates
+
+# ── Browser (controlled, visible browser for real video playback + control) ──
+browser:
+  engine: playwright              # 'playwright' (controllable, visible) or 'webbrowser' (default browser, no control)
+  headless: false                 # false = visible window you can watch (recommended)
+  preferred: auto                 # which browser to drive: auto (detect OS default) | chrome | chromium | brave | edge | vivaldi | opera | firefox
+  fullscreen: true                # open videos in fullscreen
+  # Profile = where logins are cached so your accounts stay signed in. With
+  # use_system_profile true, FRIDAY copies your real profile's logins (cookies +
+  # Default profile, minus caches) into a dedicated dir it can drive safely.
+  use_system_profile: true        # reuse your REAL browser logins (copied once into profile_dir-<browser>)
+  profile_dir: ~/.friday/browser-profile   # base dir for the driveable profile copy
+
+# ── Background services (opt-in: "everything visible" by default) ───
+scheduler:
+  run_in_background: false        # auto-fire due reminders from a polling thread
+
+# ── Learning Room ───
+learning:
+  notify_progress: true           # Telegram/Discord ping when a module completes (needs comms)
+  nudge_after_days: 3             # "it's been a while" nudge for idle topics (0 disables;
+                                  # the nudge thread rides scheduler.run_in_background)
+comms:
+  inbound_enabled: true           # reply to Telegram messages (needs FRIDAY_TELEGRAM_TOKEN + CHAT_ID; polling thread)
+  # Transcribe Telegram voice messages (optional — local STT was removed; the web
+  # UI uses the browser, but Telegram needs a transcription endpoint). Put the key
+  # in .env under api_key_env. Works with OpenAI or any OpenAI-compatible STT
+  # endpoint (set base_url, e.g. Groq). Leave the key unset to disable voice.
+  stt:
+    api_key_env: OPENAI_API_KEY
+    # base_url:                   # e.g. https://api.groq.com/openai/v1
+    model: whisper-1
 
 # ── Conversation / narration ───────────────────────────────────────
 conversation:
@@ -32,14 +92,15 @@ conversation:
   # after which a context-aware "still working" line is spoken on long tasks.
   progress_delays_s: [4.0, 12.0, 25.0]
   max_history_turns: 12
-  tool_loop_limit: 10
+  tool_loop_limit: 0              # 0 = UNLIMITED tool steps (use the Stop button to halt); >0 = hard cap
+  memory_nudge_every: 6            # remind the model to curate memory every N exchanges (0=off)
+  default_mode: agent             # 'agent' (all tools/skills) or 'chat' (pure conversation)
+  auto_approve: false             # Auto mode: run destructive tools (shell etc.) without asking permission
 
 # ── Voice ──────────────────────────────────────────────────────────
-voice:
-  tts: piper                      # local Piper TTS
-  tts_model: en_US-lessac-medium.onnx
-  stt: local                     # local push-to-talk
-  enabled: true
+# Voice is 100% browser-native (Web Speech API): the UI reads answers aloud and
+# the mic dictates input. The backend produces no audio and has no STT — there is
+# nothing to configure or install here.
 
 # ── Database ───────────────────────────────────────────────────────
 database:
@@ -91,4 +152,6 @@ security:
 
 # ── Logging ────────────────────────────────────────────────────────
 logging:
-  level: info
+  level: info                     # debug | info | warning | error  (env FRIDAY_LOG_LEVEL overrides)
+  to_file: true                   # also write logs/friday.log (rotating)
+  file: logs/friday.log

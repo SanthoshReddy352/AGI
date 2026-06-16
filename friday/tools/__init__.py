@@ -23,4 +23,11 @@ def load_tools(registry: ToolRegistry) -> ToolRegistry:
                 module.register(registry)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[tools] failed to load %s: %s", info.name, exc)
+    # Load any tools the agent authored itself (~/.friday/tools).
+    try:
+        from friday.tools.authoring import load_user_tools
+
+        load_user_tools(registry)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[tools] user-tool load failed: %s", exc)
     return registry

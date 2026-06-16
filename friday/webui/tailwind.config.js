@@ -5,27 +5,30 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: { 900: "#0a0b10", 800: "#0f111a", 700: "#161924", 600: "#1e2230" },
-        glow: { DEFAULT: "#5b8cff", soft: "#7aa2ff" },
-        accent: "#22d3ee",
+        // claude.ai-style warm palette
+        paper: { DEFAULT: "#faf9f5", soft: "#f3f1ea", panel: "#ffffff", sink: "#efece3" },
+        ink: { DEFAULT: "#2d2a26", soft: "#6b6760", faint: "#9c978d" },
+        line: { DEFAULT: "#e8e4d9", soft: "#f0ede4" },
+        brand: { DEFAULT: "#cc785c", soft: "#e0a890", deep: "#b8623f", wash: "#f6ece6" },
+        // dark surfaces
+        night: { DEFAULT: "#262624", soft: "#30302e", panel: "#2f2f2d", line: "#3d3d3a", ink: "#ece9e2", faint: "#a8a39a" },
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "Segoe UI", "sans-serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+        serif: ["Georgia", "ui-serif", "serif"],
       },
       boxShadow: {
-        glow: "0 0 40px -10px rgba(91,140,255,0.5)",
+        soft: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+        pop: "0 8px 30px -12px rgba(0,0,0,0.18)",
       },
       keyframes: {
-        pulseRing: {
-          "0%,100%": { transform: "scale(1)", opacity: "0.7" },
-          "50%": { transform: "scale(1.15)", opacity: "0.3" },
-        },
         rise: { from: { opacity: "0", transform: "translateY(6px)" }, to: { opacity: "1", transform: "translateY(0)" } },
+        blink: { "0%,100%": { opacity: "1" }, "50%": { opacity: "0.25" } },
       },
       animation: {
-        pulseRing: "pulseRing 2s ease-in-out infinite",
-        rise: "rise 0.25s ease-out",
+        rise: "rise 0.22s ease-out",
+        blink: "blink 1s ease-in-out infinite",
       },
     },
   },

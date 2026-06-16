@@ -1,62 +1,31 @@
 # Security Policy
 
-FRIDAY runs local code, can control your desktop (brightness, locking, app
-launch, clipboard, screenshots), executes sandboxed code snippets, and ships
-**scoped** network-security tooling. We take its security posture seriously.
-
-## Supported versions
-
-FRIDAY is pre-1.0. Security fixes land on `main` and the latest tagged release.
-
-| Version | Supported |
-|---|---|
-| `main` / latest release | ✅ |
-| older tags | ❌ |
-
 ## Reporting a vulnerability
 
-**Please do not open a public issue for security vulnerabilities.**
+If you find a security issue, please report it privately rather than opening a
+public issue. Use GitHub's **"Report a vulnerability"** (Security → Advisories) on
+the repository, and include:
 
-Instead, report privately via one of:
+- a description of the issue and its impact,
+- steps to reproduce (a minimal proof of concept if possible),
+- affected version / commit.
 
-- **GitHub Security Advisories** — [Report a vulnerability](../../security/advisories/new) (preferred).
-- **Email** — gsreddy1182006@gmail.com with subject `FRIDAY SECURITY`.
+We'll acknowledge the report and work with you on a fix and disclosure timeline.
 
-Please include:
+## Scope & operational notes
 
-- A description of the issue and its impact.
-- Steps to reproduce (or a proof of concept).
-- Affected version/commit and OS.
-- Any suggested remediation.
+FRIDAY is an assistant that can run shell commands, control a browser, send
+messages, and read/write files on the host. Run it as a normal (non-root) user and
+treat it with the same caution as any tool with system access.
 
-### What to expect
-
-- **Acknowledgement** within 5 business days.
-- An assessment and, if accepted, a fix timeline. We aim to ship fixes for
-  high-severity issues within 30 days.
-- Credit in the release notes (unless you prefer to remain anonymous).
-
-## Scope & safe-harbor
-
-The following are **in scope**: remote code execution, sandbox escapes from the
-code-execution module, path-traversal in file/document handling, privilege or
-permission-consent bypass (e.g. online actions running without consent), and
-leakage of local data to the network.
-
-The bundled **security tooling** (`modules/security_tools/`, e.g. nmap wrappers)
-is gated behind `security.lab_mode` and `security.authorized_scopes` in
-`config.yaml`. It is intended **only** for authorized testing of networks you own
-or have permission to test. Misuse against third-party systems is your
-responsibility, not a vulnerability in FRIDAY.
-
-We support good-faith security research. If you make a genuine effort to avoid
-privacy violations, data destruction, and service disruption while testing, we
-will not pursue or support legal action against you.
-
-## Hardening notes for operators
-
-- FRIDAY is **local-first**; online skills are opt-in via
-  `conversation.online_permission_mode: ask_first`. Review this before
-  loosening it.
-- Secrets belong in `.env` (git-ignored), never in `config.yaml`.
-- The security audit log is written to `logs/security_audit.log`.
+- **Secrets** live in `.env` at the project root (gitignored) — never commit API
+  keys, Telegram tokens, or webhooks.
+- **Approval gating** protects destructive and sensitive tools by default. Setting
+  `conversation.auto_approve: true` removes that safety net — only do so in an
+  environment you control.
+- **Security tooling** (`port_scan`, `dir_enum`, etc.) is **disabled** unless you
+  explicitly set `security.lab_mode: true` and list `authorized_scopes`. Only scan
+  systems you own or are authorized to test.
+- **Messaging bridges** (Telegram inbound, etc.) are off until credentials are
+  configured; anyone who can message the bot can drive the assistant — restrict it
+  to your own chat id.

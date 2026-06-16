@@ -1,0 +1,14 @@
+browser:
+  preferred: chromium
+  use_system_profile: true
+  fullscreen: true
+comms:
+  inbound_enabled: true
+logging:
+  level: debug
+conversation:
+  auto_approve: true
+voice:
+  enabled: true
+provider:
+  model: nemotron-3-ultra-free

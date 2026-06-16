@@ -150,11 +150,13 @@ def test_read_document_plaintext(reg, tmp_path):
     assert r.ok and "body text" in r.content
 
 
-def test_read_document_unsupported(reg, tmp_path):
+def test_read_document_unknown_ext_text(reg, tmp_path):
+    # MarkItDown now extracts text from arbitrary text-bearing files (richer than
+    # the old extension whitelist), so an unknown-but-text file reads successfully.
     f = tmp_path / "x.xyz"
-    f.write_text("data")
+    f.write_text("hello data")
     r = reg.execute("read_document", {"path": str(f)})
-    assert not r.ok and "unsupported" in r.error
+    assert r.ok and "hello data" in r.content
 
 
 def test_read_document_missing(reg, tmp_path):

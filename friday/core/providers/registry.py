@@ -45,6 +45,7 @@ PROVIDER_TYPES: dict[str, type[Provider]] = {
 _TYPE_DEFAULTS: dict[str, dict] = {
     "lmstudio": {"base_url": "http://localhost:1234/v1"},
     "ollama": {"base_url": "http://localhost:11434/v1"},
+    "opencode": {"base_url": "https://api.opencode-zen.com/v1"},
 }
 
 
@@ -92,15 +93,24 @@ class ProviderChain(Provider):
         on_token: Optional[TokenCallback] = None,
     ) -> LLMResponse:
         last_exc: Optional[Exception] = None
+        any_available = False
         for provider in self._providers:
             if not provider.is_available():
-                logger.info("[chain] skipping unavailable provider: %s", provider.name)
+                logger.info("[chain] skipping unavailable provider: %s (%s)",
+                            provider.name, provider.unavailable_reason())
                 continue
+            any_available = True
             try:
                 return provider.generate(messages, tools=tools, stream=stream, on_token=on_token)
             except ProviderError as exc:
                 last_exc = exc
                 logger.warning("[chain] %s failed, trying next: %s", provider.name, exc)
+        if not any_available:
+            reasons = "; ".join(f"{p.name}: {p.unavailable_reason()}" for p in self._providers)
+            raise ProviderError(
+                "No LLM provider is available. " + reasons + ". "
+                "If you launched with the system Python, start with the project venv "
+                "(.venv/bin/python -m friday) so the provider SDK is installed.")
         raise ProviderError(f"All providers failed. Last error: {last_exc}")
 
     def test_connection(self) -> bool:

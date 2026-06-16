@@ -96,6 +96,7 @@ class Provider(ABC):
         self.extra = dict(extra or {})
         # Resolve the API key: explicit value wins, else read the named env var,
         # else fall back to the provider's conventional env var.
+        self._api_key_env = api_key_env
         self._api_key = api_key or (os.environ.get(api_key_env) if api_key_env else None)
         if not self._api_key:
             self._api_key = os.environ.get(self._default_key_env(), "")
@@ -127,6 +128,17 @@ class Provider(ABC):
         if self._requires_key() and not self._api_key:
             return False
         return self._client_importable()
+
+    def unavailable_reason(self) -> str:
+        """Human-readable reason :meth:`is_available` is False (else "")."""
+        if self._requires_key() and not self._api_key:
+            key = self._api_key_env or self._default_key_env()
+            return f"no API key — set {key} in .env"
+        if not self._client_importable():
+            import sys
+            return (f"client library not installed in this Python "
+                    f"({sys.executable}) — run with the project venv")
+        return ""
 
     def _requires_key(self) -> bool:
         return True

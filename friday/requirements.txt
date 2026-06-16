@@ -16,20 +16,18 @@ anthropic                # provider.type: anthropic   (default)
 openai                   # provider.type: openai | openai_compat | ollama | lmstudio
 google-genai             # provider.type: google
 
-# ── VOICE (optional — Piper TTS + local Whisper STT) ───────────────
-# TTS also needs the `piper` binary on PATH + a voice model (.onnx).
-# Everything below degrades to silent no-ops if missing.
-faster-whisper           # local speech-to-text
-sounddevice              # microphone capture / playback
-numpy
+# Voice (TTS + STT) is 100% browser-native (Web Speech API) — no Python deps.
 
 # ── DESKTOP WINDOW (optional — native window instead of browser) ───
 pywebview                # `python -m friday` opens a native window; falls back to browser
 
 # ── TOOL EXTRAS (optional — features degrade gracefully without these) ──
-duckduckgo-search        # nicer web_search results (falls back to keyless HTML)
-pypdf                    # read_document for .pdf
-python-docx              # read_document for .docx
+ddgs                     # web_search backend (renamed from duckduckgo-search; falls back to keyless HTML)
+playwright               # controlled Chromium for real video playback + media_control (run: playwright install chromium)
+markitdown               # read_document: rich extraction (pdf/docx/pptx/xlsx/html/epub → markdown)
+pypdf                    # read_document for .pdf (fallback)
+python-docx              # read_document for .docx (fallback)
+python-multipart         # document upload endpoint (multipart/form-data)
 
 # ── DEV ────────────────────────────────────────────────────────────
 pytest

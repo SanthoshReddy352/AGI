@@ -1,85 +1,158 @@
-import { useEffect, useRef, useState } from "react";
-import { fetchConfig, useFriday } from "./api.js";
-import Message from "./components/Message.jsx";
-import Timeline from "./components/Timeline.jsx";
-import Composer from "./components/Composer.jsx";
+import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Outlet, useNavigate } from "react-router-dom";
+import { fetchConfig, fileChat, listProjects, renameSession, useFriday } from "./api.js";
+import Logo from "./components/Logo.jsx";
+import Sidebar from "./components/Sidebar.jsx";
 import Settings from "./components/Settings.jsx";
+import PasswordPrompt from "./components/PasswordPrompt.jsx";
+import ChatView from "./views/ChatView.jsx";
+import ProjectsView from "./views/ProjectsView.jsx";
+import ProjectDetailView from "./views/ProjectDetailView.jsx";
+import LearningView from "./views/LearningView.jsx";
+import LearningDetailView from "./views/LearningDetailView.jsx";
 
-export default function App() {
-  const { connected, messages, timeline, status, approval, send, respondApproval } = useFriday();
+// App shell: one WebSocket turn channel (useFriday) shared by every route via the
+// router Outlet context. The sidebar and global modals (approval / password /
+// settings) live here so they persist across Chat / Projects / Learning views.
+function Shell() {
+  const friday = useFriday();
+  const {
+    approval, respondApproval, passwordReq, respondPassword, shuttingDown,
+    sessions, newChat, openSession, removeSession,
+  } = friday;
+
   const [config, setConfig] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
-  const scrollRef = useRef(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const [theme, setTheme] = useState(localStorage.getItem("friday-theme") || "light");
+  const [projects, setProjects] = useState([]);
+  const [confirmReq, setConfirmReq] = useState(null); // {message, confirmLabel, resolve}
+  const navigate = useNavigate();
 
+  // In-app confirm — native window.confirm() is a no-op inside the pywebview
+  // desktop window, so destructive actions route through this modal instead.
+  const confirmAction = (message, confirmLabel = "Delete") =>
+    new Promise((resolve) => setConfirmReq({ message, confirmLabel, resolve }));
+  const resolveConfirm = (ok) => { confirmReq?.resolve(ok); setConfirmReq(null); };
+
+  const refreshProjects = () => listProjects().then((r) => r?.projects && setProjects(r.projects));
+  useEffect(() => { refreshProjects(); }, []);
+
+  function handleRename(id, title) {
+    renameSession(id, title).then(() => friday.refreshSessions());
+  }
+  function handleFile(id, projectId) {
+    fileChat(id, projectId).then(() => { friday.refreshSessions(); refreshProjects(); });
+  }
+
+  // Seed the name from the last-known value cached in localStorage so a reload
+  // shows the custom name immediately instead of flashing the default "FRIDAY".
+  const [assistantName, setAssistantName] = useState(
+    () => localStorage.getItem("friday-assistant-name") || "FRIDAY");
   useEffect(() => {
-    fetchConfig().then(setConfig);
+    fetchConfig().then((c) => {
+      setConfig(c);
+      if (c?.assistant_name) {
+        setAssistantName(c.assistant_name);
+        localStorage.setItem("friday-assistant-name", c.assistant_name);
+      }
+    });
   }, []);
-
+  useEffect(() => { document.title = assistantName; }, [assistantName]);
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, timeline]);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    localStorage.setItem("friday-theme", theme);
+  }, [theme]);
+
+  if (shuttingDown) {
+    return (
+      <div className="h-full grid place-items-center bg-paper dark:bg-night text-ink dark:text-night-ink">
+        <div className="text-center animate-rise">
+          <Logo size={56} className="mx-auto mb-4" />
+          <h1 className="font-serif text-2xl">{assistantName} has shut down.</h1>
+          <p className="mt-2 text-ink-soft dark:text-night-faint">You can close this tab. See you next time.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const ctx = {
+    ...friday, config, assistantName, theme, setTheme, projects, refreshProjects, confirmAction,
+    openChat: (id) => { openSession(id); navigate("/"); },
+    openSettings: () => setShowSettings(true),
+  };
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="relative h-9 w-9 grid place-items-center">
-            <span className="absolute inset-0 rounded-full bg-glow/30 blur-md" />
-            <span className="relative h-9 w-9 rounded-full bg-gradient-to-br from-glow to-accent grid place-items-center font-bold text-ink-900">F</span>
-          </div>
-          <div>
-            <div className="font-semibold tracking-tight">FRIDAY</div>
-            <div className="text-[11px] text-ink-50/40">
-              {config?.model || "cloud agent"} · {status === "thinking" ? "thinking…" : "ready"}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-red-400"}`} title={connected ? "connected" : "disconnected"} />
-          <button onClick={() => setShowSettings(true)} className="text-ink-50/50 hover:text-ink-50 text-sm">⚙ Settings</button>
-        </div>
-      </header>
+    <div className="h-full flex bg-paper dark:bg-night text-ink dark:text-night-ink">
+      <Sidebar
+        sessions={sessions} projects={projects}
+        onNew={() => { newChat(); navigate("/"); }}
+        onOpen={(id) => { openSession(id); navigate("/"); }}
+        onDelete={removeSession}
+        onRename={handleRename}
+        onFile={handleFile}
+        onConfirm={confirmAction}
+        onOpenSettings={() => setShowSettings(true)}
+        collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)}
+        name={assistantName}
+      />
 
-      {/* Conversation */}
-      <main ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8">
-        <div className="max-w-3xl mx-auto py-4 space-y-3">
-          {messages.length === 0 && (
-            <div className="text-center text-ink-50/40 mt-24">
-              <div className="text-2xl font-semibold text-ink-50/70">Hey, I'm FRIDAY.</div>
-              <p className="mt-2">Ask me to do something — I'll narrate as I work.</p>
-            </div>
-          )}
-          {messages.map((m) => (
-            <Message key={m.id} {...m} />
-          ))}
-          {(timeline.length > 0 && status === "thinking") && <Timeline items={timeline} />}
-        </div>
-      </main>
-
-      {/* Composer */}
-      <footer className="px-4 md:px-8 pb-5">
-        <div className="max-w-3xl mx-auto">
-          <Composer onSend={send} busy={status === "thinking"} />
-        </div>
-      </footer>
+      <div className="flex-1 flex flex-col min-w-0">
+        <Outlet context={ctx} />
+      </div>
 
       {approval && (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-black/60">
-          <div className="glass rounded-2xl p-6 w-[420px] max-w-[90vw] animate-rise">
-            <h3 className="text-lg font-semibold mb-1">Approve action?</h3>
-            <p className="text-ink-50/60 text-sm mb-1">FRIDAY wants to run a sensitive tool:</p>
-            <div className="font-mono text-accent text-sm mb-2">{approval.tool}</div>
-            <pre className="text-[12px] bg-ink-900/60 rounded-lg p-3 overflow-auto max-h-40 text-ink-50/70">{JSON.stringify(approval.args, null, 2)}</pre>
+        <div className="fixed inset-0 z-40 grid place-items-center bg-black/40 p-4">
+          <div className="w-[420px] max-w-full rounded-2xl bg-paper-panel dark:bg-night-panel border border-line dark:border-night-line shadow-pop p-5 animate-rise">
+            <h3 className="font-serif text-lg mb-1">Approve action?</h3>
+            <p className="text-ink-soft dark:text-night-faint text-sm mb-2">{assistantName} wants to run a sensitive tool:</p>
+            <div className="font-mono text-brand-deep text-sm mb-2">{approval.tool}</div>
+            <pre className="text-[12px] bg-paper-soft dark:bg-night rounded-lg p-3 overflow-auto max-h-40 text-ink-soft dark:text-night-faint">{JSON.stringify(approval.args, null, 2)}</pre>
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => respondApproval(false)} className="px-4 py-2 rounded-xl bg-ink-700 hover:bg-ink-600">Deny</button>
-              <button onClick={() => respondApproval(true)} className="px-4 py-2 rounded-xl bg-glow text-white shadow-glow">Approve</button>
+              <button onClick={() => respondApproval(false)} className="px-4 py-2 rounded-lg text-ink-soft dark:text-night-ink hover:bg-paper-soft dark:hover:bg-night-soft">Deny</button>
+              <button onClick={() => respondApproval(true)} className="px-4 py-2 rounded-lg bg-brand text-white hover:bg-brand-deep">Approve</button>
             </div>
           </div>
         </div>
       )}
 
-      {showSettings && <Settings config={config} onClose={() => setShowSettings(false)} />}
+      {confirmReq && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={() => resolveConfirm(false)}>
+          <div className="w-[400px] max-w-full rounded-2xl bg-paper-panel dark:bg-night-panel border border-line dark:border-night-line shadow-pop p-5 animate-rise"
+               onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-serif text-lg mb-1">Are you sure?</h3>
+            <p className="text-ink-soft dark:text-night-faint text-sm mb-4">{confirmReq.message}</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => resolveConfirm(false)} className="px-4 py-2 rounded-lg text-ink-soft dark:text-night-ink hover:bg-paper-soft dark:hover:bg-night-soft">Cancel</button>
+              <button autoFocus onClick={() => resolveConfirm(true)} className="px-4 py-2 rounded-lg bg-brand text-white hover:bg-brand-deep">{confirmReq.confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <PasswordPrompt req={passwordReq} onSubmit={respondPassword} onCancel={() => respondPassword("")} />
+
+      {showSettings && (
+        <Settings onClose={() => setShowSettings(false)} theme={theme}
+                  onThemeToggle={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+                  onMemoryCleared={() => { friday.refreshSessions(); newChat(); }} />
+      )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Shell />}>
+          <Route index element={<ChatView />} />
+          <Route path="projects" element={<ProjectsView />} />
+          <Route path="projects/:id" element={<ProjectDetailView />} />
+          <Route path="learning" element={<LearningView />} />
+          <Route path="learning/:id" element={<LearningDetailView />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }

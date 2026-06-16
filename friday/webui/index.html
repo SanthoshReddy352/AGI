@@ -1,9 +1,13 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <title>FRIDAY</title>
+    <!-- Set the tab title from the last-known custom name before React mounts,
+         so a reload doesn't flash the default "FRIDAY". -->
+    <script>try { var n = localStorage.getItem("friday-assistant-name"); if (n) document.title = n; } catch (e) {}</script>
   </head>
   <body>
     <div id="root"></div>

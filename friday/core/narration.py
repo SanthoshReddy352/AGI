@@ -22,6 +22,7 @@ Plug it into the agent with ``Agent(emit=narration.handle_event)`` (usually via
 """
 from __future__ import annotations
 
+import contextvars
 import threading
 from typing import Callable, Optional
 
@@ -111,9 +112,13 @@ class NarrationEngine:
 
     def _start_progress(self, sid: str, tool: str, args: dict) -> None:
         self._cancel(sid)  # only one tool's progress narrated at a time
+        # Capture the current turn's context so the delayed timer threads inherit
+        # the turn-local event sink — spoken progress lines then reach the right
+        # session's WebSocket even when several turns run concurrently.
+        ctx = contextvars.copy_context()
         timers: list[threading.Timer] = []
         for i, delay in enumerate(self.progress_delays):
-            t = threading.Timer(delay, self._fire_progress, args=(sid, tool, args, i))
+            t = threading.Timer(delay, ctx.run, args=(self._fire_progress, sid, tool, args, i))
             t.daemon = True
             t.start()
             timers.append(t)

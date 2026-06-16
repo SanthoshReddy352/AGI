@@ -28,8 +28,7 @@ class Echo(Provider):
 
 @pytest.fixture
 def service():
-    return FridayService(config={"voice": {"enabled": False}, "database": {"path": ":memory:"}},
-                         provider=Echo())
+    return FridayService(config={"database": {"path": ":memory:"}}, provider=Echo())
 
 
 def test_onboarding_needed_when_no_name(service):

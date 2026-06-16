@@ -104,19 +104,34 @@ def _unwrap_ddg_redirect(url: str) -> str:
     return url
 
 
-def _ddg_search(query: str, max_results: int) -> list[dict]:
-    """duckduckgo-search lib if installed, else the keyless DDG HTML endpoint."""
-    try:
-        from duckduckgo_search import DDGS  # noqa: PLC0415
+def _ddg_lib_search(query: str, max_results: int) -> list[dict]:
+    """Use whichever DuckDuckGo client lib is installed.
 
-        results = list(DDGS().text(query, max_results=max_results))
-        return [{
-            "title": r.get("title", ""),
-            "url": _unwrap_ddg_redirect(r.get("href", "")),
-            "snippet": r.get("body", ""),
-        } for r in results]
+    The project renamed ``duckduckgo_search`` → ``ddgs``; the old package now
+    returns 0 results, so we prefer ``ddgs`` and only fall back to the legacy
+    import for older environments."""
+    DDGS = None
+    try:
+        from ddgs import DDGS  # type: ignore  # noqa: PLC0415
     except ImportError:
-        pass
+        try:
+            from duckduckgo_search import DDGS  # type: ignore  # noqa: PLC0415
+        except ImportError:
+            return []
+    results = list(DDGS().text(query, max_results=max_results))
+    return [{
+        "title": r.get("title", ""),
+        "url": _unwrap_ddg_redirect(r.get("href") or r.get("url") or ""),
+        "snippet": r.get("body") or r.get("snippet") or "",
+    } for r in results]
+
+
+def _ddg_search(query: str, max_results: int) -> list[dict]:
+    """Library client if available, else the keyless DDG HTML endpoint."""
+    try:
+        results = _ddg_lib_search(query, max_results)
+        if results:
+            return results
     except Exception as exc:  # noqa: BLE001
         logger.debug("[web_search] DDGS lib failed: %s", exc)
 

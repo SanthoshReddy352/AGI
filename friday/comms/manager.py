@@ -42,13 +42,17 @@ class CommsManager:
             sent = self.discord.send(text) or sent
         return sent
 
-    def start_inbound(self, on_message: Callable[[str], str]) -> None:
+    def start_inbound(self, on_message: Callable[[str], str],
+                      name: Optional[str] = None) -> None:
         if not self.telegram.available or self._inbound is not None:
             return
         self._inbound = TelegramInbound(self.telegram, on_message)
         self._inbound.start()
         if self.telegram.available:
-            self.telegram.send("FRIDAY is online and ready.")
+            if not name:
+                from friday.config import assistant_name
+                name = assistant_name()
+            self.telegram.send(f"{name} is online and ready.")
         logger.info("[comms] active channels: %s", ", ".join(self.channels()) or "none")
 
     def stop(self) -> None:

@@ -76,6 +76,9 @@ def test_search_google_builds_query(reg, monkeypatch):
 
 
 def test_play_youtube_no_browser(reg, monkeypatch):
+    # Force the stdlib fallback path (Playwright disabled); webbrowser fails too.
+    import friday.tools.browser as browser_mod
+    monkeypatch.setattr(browser_mod, "_engine", lambda: "webbrowser")
     monkeypatch.setattr("webbrowser.open", lambda url: False)
     r = reg.execute("play_youtube", {"query": "lofi"})
     assert not r.ok and "browser" in r.error

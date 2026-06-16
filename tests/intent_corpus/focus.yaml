@@ -1,9 +1,0 @@
-domain: focus
-cases:
-  - { say: "start a focus session", tool: start_focus_session }
-  - { say: "start focus mode", tool: start_focus_session }
-  - { say: "begin a focus session for 25 minutes", tool: start_focus_session }
-  - { say: "end the focus session", tool: end_focus_session }
-  - { say: "stop focus mode", tool: end_focus_session }
-  - { say: "how much focus time is left", tool: focus_session_status }
-  - { say: "focus session status", tool: focus_session_status }

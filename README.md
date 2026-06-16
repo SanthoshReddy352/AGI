@@ -1,213 +1,157 @@
-<div align="center">
-
 # FRIDAY
 
-**A local-first, voice-driven AI desktop assistant for Linux & Windows.**
+A cloud-only personal AI assistant. The brain is an API call — native
+Anthropic, OpenAI, or Google, or any OpenAI-compatible endpoint (Ollama,
+LM Studio, opencode, or a custom base URL). One agent loop, a tool registry,
+cross-session memory, a learning-loop skill system, voice (Piper TTS + local
+STT), a web UI, and messaging bridges.
 
-FRIDAY keeps reasoning on your machine — chat, planning, and tool use run on
-local models — and reaches online only when you ask it to.
+Everything lives in the [`friday/`](friday/) package. There is no local-model or
+PyQt stack — the assistant is provider-agnostic and runs anywhere Python does.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-blue.svg)](#installation)
-[![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](#requirements)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-
-[Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [Configuration](#configuration) · [Contributing](CONTRIBUTING.md)
-
-</div>
-
----
-
-## What is FRIDAY?
-
-FRIDAY is a desktop assistant you talk to. Say **"Hey Friday"**, ask it to set
-your brightness, find a file, summarize a PDF, look something up, or run a
-multi-step workflow — and it does the work locally, narrating progress out loud.
-
-It is built around three ideas:
-
-- **Local-first.** Speech-to-text, the conversational model, the planning model,
-  vision, and embeddings all run on your hardware. No account, no cloud
-  inference, no telemetry. Online skills (web search, browser automation) are
-  opt-in and ask for consent before they reach the network.
-- **Capability-driven.** Every skill is a self-contained capability registered
-  in an MCP-compatible registry. A deterministic intent layer routes the common
-  phrasings instantly; anything else falls through to a local planning model.
-- **Cross-platform.** One codebase runs on Linux and Windows, with
-  platform-specific paths guarded throughout and parity between `setup.sh` and
-  `setup.ps1`.
-
-> [!NOTE]
-> FRIDAY is an early-stage project (v0.1). Expect rough edges, and please
-> [open an issue](../../issues) when you hit one.
-
-## Features
-
-| Area | What it does |
-|---|---|
-| 🗣️ **Voice I/O** | "Hey Friday" wake word (Porcupine), `faster-whisper` STT, Piper neural TTS with barge-in. Falls back to text chat. |
-| 💬 **Natural conversation** | Local chat model with session-aware turns, custom personas, and a three-tier memory (episodic / semantic / procedural). |
-| 🖥️ **System control** | Brightness, volume, screen lock/unlock, screenshots, app launch, window queries, clipboard. |
-| 📄 **Document intelligence** | Index and ask questions over your PDFs/Office/Markdown via local RAG (`markitdown` + Chroma). |
-| 👁️ **Vision (VLM)** | Screenshot explainer, OCR, screen summarizer, UI-element finder, code debugger — powered by a local SmolVLM2 model. |
-| 🌐 **Online skills (opt-in)** | Browser automation (Playwright/Selenium), web/quick-answer search, news & world monitoring, weather. |
-| 🗂️ **Productivity** | Reminders, calendar events, notes, tasks, goals, focus sessions, dictation. |
-| 🔌 **Extensible** | Add a capability + an intent pattern; optional external MCP and a plugin architecture across 28 modules. |
-| 🔒 **Privacy & safety** | Ask-before-online consent, scoped security tooling (lab mode), local audit log. |
+> **Rename it to whatever you like.** FRIDAY is just the default name. Set
+> `assistant.name` in [`friday/config.yaml`](friday/config.yaml) (or the
+> `ASSISTANT_NAME` env var) and it changes everywhere — the system prompt, the
+> web UI, the voice, and the messaging bridges. See [Rename](#rename-the-assistant).
 
 ## Quick start
 
-### Requirements
-
-| | Minimum |
-|---|---|
-| **OS** | Ubuntu 22.04+/Debian 12+/Kali (Linux) · Windows 10 21H2+/Windows 11 |
-| **Python** | 3.10 – 3.13 (3.11 recommended) |
-| **RAM** | 8 GB (16 GB recommended) |
-| **Disk** | ~10 GB for models + cache |
-| **GPU** | Optional — llama.cpp & faster-whisper auto-use CUDA when present |
-
-### Installation
-
-<details open>
-<summary><strong>Linux</strong></summary>
+From the project root:
 
 ```bash
-git clone https://github.com/SanthoshReddy352/Friday_Linux.git
-cd Friday_Linux
-chmod +x setup.sh
-./setup.sh            # installs deps, Piper TTS, downloads default models, bootstraps .env
-source .venv/bin/activate
-python main.py
+python3 -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install -r friday/requirements.txt
 ```
 
-Full walkthrough (incl. fully-manual path): **[SETUP_GUIDE.md](SETUP_GUIDE.md)**
-</details>
+Don't need voice or the desktop window? Install just the core + your provider:
 
-<details>
-<summary><strong>Windows</strong></summary>
-
-```powershell
-git clone https://github.com/SanthoshReddy352/Friday_Linux.git
-cd Friday_Linux
-.\setup.ps1           # installs deps, Piper TTS, downloads default models, bootstraps .env
-.\.venv\Scripts\Activate.ps1
-python main.py
+```bash
+pip install fastapi "uvicorn[standard]" pydantic PyYAML anthropic
 ```
 
-Full walkthrough: **[SETUP_GUIDE_WINDOWS.md](SETUP_GUIDE_WINDOWS.md)**
-</details>
+### Add your API key
 
-The setup scripts are idempotent — they skip any step whose output is already on
-disk, and a failed/blank model download is reported, not fatal.
-
-### Default models
-
-| Role | Model | Size |
-|---|---|---|
-| Chat | `Qwen3.5-0.8B-Q4_K_M.gguf` | ~533 MB |
-| Tool / planner | `Qwen3.5-4B-Q4_K_M.gguf` | ~2.7 GB |
-| Speech-to-text | `faster-whisper base.en` | ~140 MB |
-| Vision | `SmolVLM2-2.2B-Instruct-Q4_K_M.gguf` | ~1.7 GB |
-| Embeddings | `all-MiniLM-L6-v2` + `ms-marco-MiniLM` reranker | ~120 MB |
-
-Override the chat/tool downloads with `FRIDAY_CHAT_MODEL_URL` /
-`FRIDAY_TOOL_MODEL_URL`, or drop your own `.gguf` files into `models/`.
-
-### First words to try
-
-> "Hey Friday — set brightness to 60."
-> "What's on my calendar today?"
-> "Find the file called design final report."
-> "Summarize this PDF." · "Take a screenshot and explain it." · "What's the weather in Mumbai?"
-
-## Architecture
-
-```
-voice / text in
-      │
-   STTEngine ──► TurnOrchestrator (v2)
-                     │
-        ┌────────────┴─────────────┐
-   IntentRecognizer           RouteScorer (LLM)
-   (deterministic regex)      (local planner, fallback)
-        └────────────┬─────────────┘
-                CapabilityBroker ──► ToolPlan
-                     │
-        OrderedToolExecutor  ⇄  GraphCompiler (LangGraph, opt-in)
-                     │
-            CapabilityExecutor ──► 28 capability modules
-                     │
-            ResponseFinalizer ──► persona ──► TTS / GUI
-                     │
-   Memory: SQLite domain stores (core/stores/) + Chroma vector index
+```bash
+cp friday/.env.example .env          # .env is read from the project root
 ```
 
-- **`TurnOrchestrator`** owns the turn lifecycle (`core/planning/`).
-- **`IntentRecognizer`** (`core/intent_recognizer.py`) is the fast deterministic
-  routing layer — 50+ phrase parsers. Misses fall through to the local planner.
-- **`WorkflowOrchestrator`** (`core/workflow_orchestrator.py`) runs multi-step
-  templates with slot-filling, replanning, and step approval.
-- **Persistence** is decomposed into six domain stores under `core/stores/`
-  (session, memory, audit, workflow, goal, knowledge-graph).
+Edit `.env` and set the key for the provider you'll use, e.g.:
 
-A deeper map — communities, god-nodes, and a pre-built knowledge graph — lives
-in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Pick the provider in [`friday/config.yaml`](friday/config.yaml) → `provider.type`
+(`anthropic` · `openai` · `google` · `ollama` · `lmstudio` · `openai_compat`).
+**Local Ollama / LM Studio need no key** — point `provider.type: ollama` at a
+running server for a fully offline setup.
+
+### Run it
+
+```bash
+python -m friday              # native desktop window (pywebview)
+python -m friday --server     # backend only — open http://127.0.0.1:8000
+```
+
+`--server` is the most reliable first run (no GUI dependency). The chat UI is at
+**http://127.0.0.1:8000**.
+
+## Rename the assistant
+
+One switch, applied everywhere. Either:
+
+```yaml
+# friday/config.yaml
+assistant:
+  name: Jarvis
+```
+
+or, without editing any file:
+
+```bash
+ASSISTANT_NAME=Jarvis python -m friday --server
+```
+
+The name flows into the model's system prompt (its self-identity), the web UI
+(title, greeting, sidebar, composer), the `about_*` self-knowledge tool, and the
+Telegram `/help`. `FRIDAY_*` environment-variable names (API keys, Telegram
+tokens) are intentionally left unchanged.
+
+## What it can do
+
+| Area | Tools |
+|------|-------|
+| Files | `read_file` `write_file` `list_dir` `move_path` `copy_path` `delete_path` `make_dir` `find_files` `organize_dir` |
+| Shell / System | `run_shell` `system_info` `open_app` `list_open_apps` |
+| Web | `web_search` `web_extract` `web_crawl` |
+| Browser | `open_browser_url` `search_google` `play_youtube` `play_youtube_music` `media_control` |
+| Network | `ping_host` `dns_lookup` `check_port` `public_ip` |
+| Security\* | `port_scan` `ping_sweep` `dir_enum` `dns_enum` |
+| Weather / News | `get_weather` `get_news` |
+| Smart home† | `ha_turn_on` `ha_turn_off` `ha_get_state` `ha_set_temperature` |
+| Vision | `take_screenshot` `read_text_from_image` |
+| Documents | `read_document` (pdf/docx/pptx/xlsx/html via MarkItDown) |
+| Scheduler | `add_reminder` `list_reminders` `remove_reminder` (fire in background) |
+| Memory | `remember_fact` `recall_facts` `forget_fact` `remember_note` `read_memory` `search_conversations` `recall_sessions` |
+| Agent | `delegate_task` `switch_persona` `list_personas` `about_friday` |
+| Tasks / Goals | `add_task` `list_tasks` `complete_task` `remove_task` · `add_goal` `list_goals` `update_goal_progress` `remove_goal` |
+| Focus | `start_focus` `focus_status` `end_focus` |
+| Skills | `list_skills` `use_skill` `create_skill` `update_skill` |
+| Comms‡ | `send_notification` (+ inbound Telegram chat bridge) |
+| Workspace | `gmail_list` `gmail_read` `gmail_send` `calendar_agenda` `calendar_create_event` |
+| MCP§ | `mcp_list_servers` + `mcp_<server>_<tool>` per connected server |
+
+\* off until `security.lab_mode: true` + `authorized_scopes` in config.
+† off until `smart_home.url` + `HASS_TOKEN` are set.
+‡ off until Telegram/Discord credentials are in `.env`.
+§ only when `mcp.servers` are configured.
+
+Sensitive/destructive tools are approval-gated by default; set
+`conversation.auto_approve: true` to run them without prompting.
 
 ## Configuration
 
-Runtime behavior is driven by [`config.yaml`](config.yaml); secrets and machine
-overrides go in `.env` (copied from [`.env.example`](.env.example) at setup).
-Highlights:
+- **Base config** (documented, commented): [`friday/config.yaml`](friday/config.yaml)
+- **UI / runtime overrides**: `friday/config.local.yaml` (written by the Settings
+  panel; the base file is never rewritten)
+- **Secrets**: `.env` at the project root (never commit it)
+- **Provider override**: `FRIDAY_CONFIG=/path/to/config.yaml` to use a different file
 
-```yaml
-conversation:
-  listening_mode: manual          # or wake-word driven
-  online_permission_mode: ask_first
-models:
-  chat:  { path: models/Qwen3.5-0.8B-Q4_K_M.gguf }
-  tool:  { path: models/Qwen3.5-4B-Q4_K_M.gguf }
-routing:
-  execution_engine: parallel      # ordered | parallel | graph (LangGraph)
-  use_replanning: true
-```
+## Optional system tools
 
-Full key-by-key reference: **[docs/config_reference.md](docs/config_reference.md)**.
+Each degrades gracefully — if the binary is missing, the tool returns a clear
+"install X" message instead of crashing.
 
-## Project layout
-
-```
-core/        turn orchestration, intent recognition, routing, stores, reasoning
-modules/     28 capability plugins (system_control, vision, document_intel, …)
-gui/         PyQt6 HUD
-docs/        architecture, setup, testing, and design docs
-scripts/     setup helpers and hand-run diagnostics
-tests/       pytest suite (unit + cross-turn conversation rig)
-main.py      entry point
-```
+- **Voice TTS:** the `piper` binary + a `.onnx` voice model on PATH.
+- **Vision:** `grim` / `scrot` / `gnome-screenshot` (capture), `tesseract` (OCR).
+- **Security:** `nmap`, `gobuster`, `dig`.
+- **Real browser control:** Playwright (`pip install playwright && playwright install chromium`).
 
 ## Documentation
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** / **[SETUP_GUIDE_WINDOWS.md](SETUP_GUIDE_WINDOWS.md)** — install
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — how it all fits together
-- **[docs/testing_guide.md](docs/testing_guide.md)** — command-first behavior spec
-- **[docs/config_reference.md](docs/config_reference.md)** — every config key
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — dev workflow & conventions
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — how the system works, UML diagrams,
+  and the reasoning behind every major technical decision.
+- **[docs/SKILLS.md](docs/SKILLS.md)** — how skills (procedural memory) work and are created.
+- **[docs/EXTENDING.md](docs/EXTENDING.md)** — create your own tools and skills.
+- **[docs/SELF_MODIFICATION.md](docs/SELF_MODIFICATION.md)** — how the assistant extends
+  and reconfigures itself at runtime.
 
-## Contributing
+## Testing
 
-Contributions are welcome. Start with **[CONTRIBUTING.md](CONTRIBUTING.md)** for
-the dev setup, the intent-pattern + test requirement for new capabilities, and
-the PR checklist. Please also read the **[Code of Conduct](CODE_OF_CONDUCT.md)**.
+```bash
+python -m pytest friday/tests/ -q       # full suite, offline/mocked, no API key
+```
 
-## Security
+## Troubleshooting
 
-FRIDAY runs local code, can control your system, and ships scoped security
-tooling. To report a vulnerability, see **[SECURITY.md](SECURITY.md)** — please
-do not open a public issue for security reports.
+- **`ModuleNotFoundError: anthropic`** → install your provider SDK
+  (`pip install anthropic` / `openai` / `google-genai`).
+- **Native window doesn't open** → pywebview missing or no display; use
+  `python -m friday --server` and open the browser.
+- **Provider/auth errors on first chat** → key missing/typo in `.env`, or
+  `provider.type` doesn't match the key you set.
 
 ## License
 
-[MIT](LICENSE) © 2026 Santhosh Reddy and the FRIDAY contributors.
-Third-party components and their licenses are listed in
-[docs/third_party_credits.md](docs/third_party_credits.md).
+[MIT](LICENSE).

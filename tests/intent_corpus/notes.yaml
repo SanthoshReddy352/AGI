@@ -1,8 +1,0 @@
-domain: notes
-cases:
-  - { say: "take a note", tool: save_note }
-  - { say: "make a note that the wifi password is hunter2", tool: save_note }
-  - { say: "note that I parked on level 3", tool: save_note }
-  - { say: "read my notes", tool: read_notes }
-  - { say: "what are my notes", tool: read_notes }
-  - { say: "show me my notes", tool: read_notes }

@@ -116,6 +116,31 @@ def test_delegate_task_requires_task(wired):
     assert not reg.execute("delegate_task", {"task": ""}).ok
 
 
+def test_delegate_inherits_main_tool_loop_limit(wired):
+    """The research sub-agent must honour the main agent's tool-step budget — not a
+    hidden hardcoded cap — so an unlimited config lets deep research finish."""
+    reg, db, agent = wired
+
+    class _Looping(Provider):
+        name = "loop"
+        def __init__(self):
+            super().__init__(model="loop")
+            self.calls = 0
+        def is_available(self):
+            return True
+        def generate(self, messages, tools=None, stream=False, on_token=None):
+            self.calls += 1  # never finalize → loop runs to the cap
+            return LLMResponse(content="", tool_calls=[
+                ToolCall(id=str(self.calls), name="system_info", args={})])
+
+    prov = _Looping()
+    agent.provider = prov
+    agent.tool_loop_limit = 3  # the sub-agent must use THIS, not the old hardcoded 8
+    register_agent_tools(reg, agent, prov, db)
+    reg.execute("delegate_task", {"task": "x"})
+    assert prov.calls == 3
+
+
 # ── persona ───────────────────────────────────────────────────────────────────
 
 def test_list_personas(wired):

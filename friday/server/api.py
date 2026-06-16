@@ -20,16 +20,20 @@ from __future__ import annotations
 import asyncio
 import itertools
 import queue
+import threading
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from friday.core.logger import logger
 from friday.service import FridayService
+
+_UPLOAD_DIR = Path("data/uploads")
+_MEDIA_DIR = Path("data/media")
 
 _WEBUI_DIST = Path(__file__).resolve().parent.parent / "webui" / "dist"
 
@@ -41,6 +45,136 @@ class PersonaBody(BaseModel):
 class OnboardingBody(BaseModel):
     name: str = ""
     facts: dict = {}
+
+
+class SettingsBody(BaseModel):
+    config: dict = {}   # deep-merged into config.local.yaml
+    env: dict = {}      # written to .env (e.g. API keys)
+
+
+class MemoryClearBody(BaseModel):
+    scope: str = "all"  # facts | conversations | notes | all
+
+
+class ProjectBody(BaseModel):
+    name: str = ""
+    description: str = ""
+
+
+class RenameBody(BaseModel):
+    title: str = ""
+
+
+class FileChatBody(BaseModel):
+    project_id: str | None = None  # null/"" to unfile
+
+
+class ScopeMemoryBody(BaseModel):
+    content: str = ""
+
+
+class LearningBody(BaseModel):
+    topic: str = ""
+    depth: str = "solid"
+
+
+class PlanBody(BaseModel):
+    modules: list = []
+
+
+class QuizResultBody(BaseModel):
+    question: str = ""
+    correct: bool = False
+    module_id: str | None = None
+    user_answer: str = ""
+    quiz_id: str = ""              # ties the answer back to the persisted card
+    options: list = []
+    answer_index: int | None = None
+    picked_index: int | None = None
+    explanation: str = ""
+
+
+_DEPTH_PHRASE = {
+    "curious": "a friendly overview",
+    "solid": "a solid, usable understanding",
+    "deep": "a deep understanding, including the why",
+    "expert": "a rigorous, expert-level command",
+}
+
+
+def _path_chat_intro(topic: dict) -> str:
+    """A seeded opening for the topic's path chat so it never looks like an
+    empty new chat (no model call)."""
+    title = topic.get("title") or "this topic"
+    n = len(topic.get("plan") or [])
+    lines = [f"🗺️ This is the **path chat** for **{title}** — your home base for the whole "
+             f"journey{f' ({n} modules)' if n else ''}."]
+    lines.append("\nHere you can:")
+    lines.append("- **Ask anything about the path** — why it's ordered this way, what a module covers, where a subtopic lives.")
+    lines.append("- **Reshape it** — add, drop, split, or reorder modules; change the pace.")
+    lines.append("- **Set standing preferences** — tell me *how* to teach you from now on "
+                 "(e.g. “research every answer”, “use cricket examples”, “always show code”) "
+                 "and I'll apply it in every module.")
+    lines.append("\nThe actual lessons happen inside each module's own chat — open one from "
+                 "the learning path. What would you like to know or change?")
+    return "\n".join(lines)
+
+
+def _module_intro(topic: Optional[dict], module: Optional[dict]) -> str:
+    """A warm, specific opening line for a brand-new module chat (no model call)."""
+    topic = topic or {}
+    module = module or {}
+    tname = topic.get("title") or "this topic"
+    mtitle = module.get("title") or tname
+    summary = (module.get("summary") or "").strip()
+    plan = topic.get("plan") or []
+    idx = next((i for i, m in enumerate(plan) if m.get("id") == module.get("id")), None)
+    pos = f" — module {idx + 1} of {len(plan)}" if idx is not None and plan else ""
+    depth = _DEPTH_PHRASE.get(topic.get("depth", "solid"), "a solid understanding")
+
+    lines = [f"👋 Welcome! Today we're learning **{mtitle}**{pos}, on our way to {depth} of "
+             f"**{tname}**."]
+    if summary:
+        lines.append(f"\nHere's what this part covers: {summary}")
+    lines.append(
+        "\nI'll teach it step by step — simple real-life examples, a diagram or two, and a "
+        "quick check so it really sticks. Whenever you're ready, just say **“I'm ready”** "
+        "(or ask me anything) and we'll begin.")
+    return "\n".join(lines)
+
+
+def _restore_turns(db, session_id: str) -> list[dict]:
+    """Session history for the UI, with persisted quiz cards restored.
+
+    A 'quiz' turn is written the moment `pose_quiz` fires — i.e. BEFORE the
+    assistant's full text turn is persisted at the end of the loop — so each
+    card is moved to sit after its assistant message, matching the live view.
+    The recorded answer (if any) is attached so the card reopens answered."""
+    import json as _json
+
+    out: list[dict] = []
+    pending: list[dict] = []
+    for t in db.session_turns(session_id):
+        if t["role"] != "quiz":
+            out.append(t)
+            if t["role"] == "assistant" and pending:
+                out.extend(pending)
+                pending = []
+            continue
+        try:
+            quiz = _json.loads(t["content"])
+        except ValueError:
+            continue  # malformed card — drop rather than break the chat
+        answer = db.get_quiz_result(quiz.get("quiz_id") or "")
+        if answer is not None:
+            picked = answer.get("picked_index")
+            if picked is None and answer.get("user_answer") in (quiz.get("options") or []):
+                picked = (quiz.get("options") or []).index(answer["user_answer"])
+            quiz["picked"] = picked
+        pending.append({"role": "quiz", "content": "", "quiz": quiz,
+                        "created_at": t.get("created_at")})
+    out.extend(pending)
+    return out
 
 
 def create_app(service: Optional[FridayService] = None) -> FastAPI:
@@ -76,6 +210,246 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
     def new_session():
         return {"session_id": service.new_session()}
 
+    @app.get("/api/sessions")
+    def list_sessions():
+        # Sidebar shows only *unfiled* chats — chats that belong to a project live
+        # in that project, never in the global recent list.
+        return {"sessions": service.db.list_sessions(project_id="")}
+
+    @app.get("/api/sessions/{session_id}")
+    def session_history(session_id: str):
+        # Include the chat's "home" (project or learning topic) so the chat view can
+        # show a breadcrumb back to where it belongs.
+        meta = service.db.get_session(session_id) or {}
+        project = None
+        pid = meta.get("project_id")
+        if pid:
+            p = service.db.get_project(pid)
+            if p:
+                project = {"id": p["id"], "name": p["name"]}
+        topic = None
+        # Topic resolution scans every learning topic's plan — only worth it for
+        # learning sessions; plain/project chats skip it entirely.
+        if (meta.get("kind") or "chat") == "learning":
+            t = service.db.get_topic_by_session(session_id)
+            if t:
+                mod = next((m for m in (t.get("plan") or [])
+                            if m.get("session_id") == session_id), None)
+                topic = {"id": t["id"], "title": t["title"], "module": (mod or {}).get("title")}
+        return {"session_id": session_id,
+                "turns": _restore_turns(service.db, session_id),
+                "project": project, "topic": topic,
+                "title": (meta.get("title") or "").strip()}
+
+    @app.delete("/api/sessions/{session_id}")
+    def delete_session(session_id: str):
+        return {"deleted": service.db.delete_session(session_id)}
+
+    @app.patch("/api/sessions/{session_id}")
+    def rename_session(session_id: str, body: RenameBody):
+        return {"renamed": service.db.rename_session(session_id, body.title)}
+
+    @app.post("/api/sessions/{session_id}/project")
+    def file_chat(session_id: str, body: FileChatBody):
+        return {"filed": service.db.set_session_project(session_id, body.project_id)}
+
+    # -- projects ----------------------------------------------------------
+
+    @app.get("/api/projects")
+    def list_projects():
+        return {"projects": service.db.list_projects()}
+
+    @app.post("/api/projects")
+    def create_project(body: ProjectBody):
+        return {"project": service.db.create_project(body.name, body.description)}
+
+    @app.get("/api/projects/{project_id}")
+    def get_project(project_id: str):
+        project = service.db.get_project(project_id)
+        if not project:
+            return {"project": None}
+        return {
+            "project": project,
+            "sessions": service.db.list_sessions(project_id=project_id),
+            "memory": service.db.list_scope_memory("project", project_id),
+            "documents": service.db.list_project_documents(project_id),
+        }
+
+    @app.patch("/api/projects/{project_id}")
+    def update_project(project_id: str, body: ProjectBody):
+        return {"project": service.db.update_project(
+            project_id, name=body.name or None, description=body.description)}
+
+    @app.delete("/api/projects/{project_id}")
+    def delete_project(project_id: str):
+        deleted = service.db.delete_project(project_id)
+        if deleted:  # the index rows are gone; remove the files on disk too
+            import shutil
+
+            from friday.core.docindex import PROJECT_FILES_DIR
+            shutil.rmtree(PROJECT_FILES_DIR / project_id, ignore_errors=True)
+        return {"deleted": deleted}
+
+    @app.post("/api/projects/{project_id}/sessions")
+    def new_project_session(project_id: str):
+        sid = service.db.create_session_in(project_id=project_id)
+        # Cross-session continuity: summarize this project's finished chats in the
+        # background so the new chat's prompt carries what was discussed before.
+        threading.Thread(target=service.summarize_project_sessions,
+                         args=(project_id,), daemon=True).start()
+        return {"session_id": sid}
+
+    # -- project documents (multi-document RAG) -----------------------------
+
+    @app.post("/api/projects/{project_id}/documents")
+    async def upload_project_document(project_id: str, file: UploadFile = File(...)):
+        """Upload + ingest a document into the project's knowledge base. Enforces
+        the 25-files-per-project and 10MB-per-file caps; screens for prompt
+        injection (flagged files are quarantined out of retrieval)."""
+        from friday.core import docindex
+
+        if not service.db.get_project(project_id):
+            return {"ok": False, "error": "project not found"}
+        if service.db.count_project_documents(project_id) >= docindex.MAX_FILES_PER_PROJECT:
+            return {"ok": False,
+                    "error": f"Project document limit reached "
+                             f"({docindex.MAX_FILES_PER_PROJECT} files). Remove one first."}
+        data = await file.read()
+        if len(data) > docindex.MAX_FILE_BYTES:
+            return {"ok": False,
+                    "error": f"'{file.filename}' is too large "
+                             f"({len(data) / 1e6:.1f} MB). The limit is 10 MB per file."}
+        if not data:
+            return {"ok": False, "error": "the uploaded file is empty"}
+        dest = docindex.save_upload(project_id, file.filename or "upload", data)
+        doc = await asyncio.to_thread(
+            docindex.ingest_document, service.db, project_id, str(dest), Path(file.filename or "upload").name)
+        return {"ok": True, "document": doc,
+                "documents": service.db.list_project_documents(project_id)}
+
+    @app.get("/api/projects/{project_id}/documents")
+    def list_project_documents(project_id: str):
+        return {"documents": service.db.list_project_documents(project_id)}
+
+    @app.delete("/api/projects/{project_id}/documents/{doc_id}")
+    def delete_project_document(project_id: str, doc_id: str):
+        doc = service.db.get_project_document(doc_id)
+        deleted = service.db.delete_project_document(doc_id)
+        if deleted and doc and doc.get("path"):
+            Path(doc["path"]).unlink(missing_ok=True)
+        return {"deleted": deleted,
+                "documents": service.db.list_project_documents(project_id)}
+
+    @app.post("/api/projects/{project_id}/documents/{doc_id}/trust")
+    def trust_project_document(project_id: str, doc_id: str):
+        """User override for a flagged document: include it in retrieval anyway."""
+        doc = service.db.get_project_document(doc_id)
+        if not doc or doc["project_id"] != project_id:
+            return {"ok": False, "error": "document not found"}
+        service.db.set_document_status(doc_id, "trusted")
+        return {"ok": True, "documents": service.db.list_project_documents(project_id)}
+
+    @app.post("/api/projects/{project_id}/memory")
+    def add_project_memory(project_id: str, body: ScopeMemoryBody):
+        eid = service.db.add_scope_memory("project", project_id, body.content)
+        return {"id": eid, "memory": service.db.list_scope_memory("project", project_id)}
+
+    @app.delete("/api/scope_memory/{entry_id}")
+    def delete_scope_memory(entry_id: int):
+        return {"deleted": service.db.delete_scope_memory_entry(entry_id)}
+
+    # -- learning room -----------------------------------------------------
+
+    @app.get("/api/learning")
+    def list_learning():
+        return {"topics": service.db.list_learning_topics()}
+
+    @app.post("/api/learning")
+    def create_learning(body: LearningBody):
+        topic = service.db.create_learning_topic(body.topic, body.depth)
+        return {"topic": topic}
+
+    @app.post("/api/learning/from_document")
+    async def create_learning_from_document(file: UploadFile = File(...)):
+        """Build a topic + path from an uploaded syllabus (level auto-detected).
+        The document is screened first; injection or non-syllabus content flags
+        the upload and nothing is created."""
+        data = await file.read()
+        if not data:
+            return {"ok": False, "reasons": ["the uploaded file is empty"]}
+        if len(data) > 10 * 1024 * 1024:
+            return {"ok": False, "reasons": ["the file exceeds the 10 MB limit"]}
+        _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        dest = _UPLOAD_DIR / Path(file.filename or "syllabus").name
+        dest.write_bytes(data)
+        return await asyncio.to_thread(
+            service.learning_from_document, str(dest), Path(file.filename or "syllabus").name)
+
+    @app.get("/api/learning/{topic_id}")
+    def get_learning(topic_id: str):
+        topic = service.db.get_learning_topic(topic_id)
+        if not topic:
+            return {"topic": None}
+        return {
+            "topic": topic,
+            "insights": service.db.topic_insights(topic_id),
+            "memory": service.db.list_scope_memory("learning", topic_id),
+        }
+
+    @app.delete("/api/learning/{topic_id}")
+    def delete_learning(topic_id: str):
+        return {"deleted": service.db.delete_learning_topic(topic_id)}
+
+    @app.delete("/api/learning/{topic_id}/preferences/{index}")
+    def delete_teaching_preference(topic_id: str, index: int):
+        return {"topic": service.db.remove_teaching_preference(topic_id, index)}
+
+    @app.patch("/api/learning/{topic_id}/plan")
+    def update_plan(topic_id: str, body: PlanBody):
+        return {"topic": service.db.set_learning_plan(topic_id, body.modules)}
+
+    @app.post("/api/learning/{topic_id}/session")
+    def learning_path_session(topic_id: str):
+        """The topic's path chat (its overview session), seeded with an intro so
+        opening it never shows a blank 'new chat'."""
+        topic = service.db.get_learning_topic(topic_id)
+        if not topic:
+            return {"session_id": None}
+        sid = topic["session_id"]
+        # Seed only if the thread has no *assistant* turn yet — path-build prompts
+        # (sent silently by the dashboard) may already sit in the history.
+        turns = service.db.session_turns(sid)
+        if not any(t["role"] == "assistant" for t in turns):
+            service.db.add_turn(sid, "assistant", _path_chat_intro(topic))
+        return {"session_id": sid}
+
+    @app.post("/api/learning/{topic_id}/module/{module_id}/session")
+    def module_session(topic_id: str, module_id: str):
+        sid = service.db.module_session(topic_id, module_id)
+        # Seed a warm intro so a freshly-opened module never shows a blank chat —
+        # the learner lands on the teacher introducing what's ahead.
+        if sid and not service.db.session_turns(sid):
+            topic = service.db.get_learning_topic(topic_id)
+            module = next((m for m in (topic.get("plan") or [])
+                           if m.get("id") == module_id), None) if topic else None
+            service.db.add_turn(sid, "assistant", _module_intro(topic, module))
+        return {"session_id": sid}
+
+    @app.post("/api/learning/{topic_id}/quiz")
+    def record_quiz(topic_id: str, body: QuizResultBody):
+        service.db.record_quiz(topic_id, body.question, body.correct,
+                               module_id=body.module_id, user_answer=body.user_answer,
+                               quiz_uid=body.quiz_id, options=body.options or None,
+                               answer_index=body.answer_index,
+                               picked_index=body.picked_index,
+                               explanation=body.explanation)
+        return {"insights": service.db.topic_insights(topic_id)}
+
+    @app.post("/api/shutdown")
+    def shutdown():
+        service.shutdown()
+        return {"ok": True, "message": "FRIDAY is shutting down."}
+
     @app.get("/api/onboarding")
     def onboarding_status():
         return service.onboarding_status()
@@ -84,21 +458,68 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
     def complete_onboarding(body: OnboardingBody):
         return service.complete_onboarding(body.name, body.facts)
 
-    @app.get("/api/voice")
-    def voice_status():
+    @app.get("/api/settings")
+    def get_settings():
+        """Effective config (for the settings UI) + which secret env keys are set."""
+        import os as _os
+
+        from friday.config import load_config
+
+        env_keys = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY",
+                    "FRIDAY_TELEGRAM_TOKEN", "FRIDAY_TELEGRAM_CHAT_ID", "FRIDAY_API_KEY"]
         return {
-            "tts": bool(service.tts and service.tts.available()),
-            "stt": bool(service.stt and service.stt.available()),
+            "config": load_config(),
+            "env_set": {k: bool(_os.environ.get(k)) for k in env_keys},
         }
 
-    @app.post("/api/stt/record")
-    async def stt_record():
-        """Server-side push-to-talk: record from the local mic until silence,
-        return the transcript. Only useful when FRIDAY runs on the user's machine."""
-        import asyncio as _asyncio
+    @app.post("/api/settings")
+    def update_settings(body: SettingsBody):
+        from friday.config import set_env_values, update_config
 
-        text = await _asyncio.to_thread(service.transcribe_once)
-        return {"text": text}
+        merged = update_config(body.config) if body.config else None
+        written = set_env_values(body.env) if body.env else []
+        logger.info("[settings] updated config keys=%s env keys=%s",
+                    list((body.config or {}).keys()), written)
+        return {"ok": True, "config": merged, "env_written": written,
+                "note": "Some changes (provider/model/keys) take effect on restart."}
+
+    @app.post("/api/memory/clear")
+    def clear_memory(body: MemoryClearBody):
+        return service.clear_memory(body.scope)
+
+    @app.get("/api/providers")
+    def providers():
+        """Provider catalog (with .env key-set flags) + the active provider config."""
+        from friday.core.providers.catalog import provider_catalog
+
+        pcfg = service.config.get("provider") or {}
+        return {
+            "providers": provider_catalog(),
+            "active": {
+                "type": pcfg.get("type", ""),
+                "model": pcfg.get("model", ""),
+                "base_url": pcfg.get("base_url", ""),
+            },
+        }
+
+    @app.get("/api/models")
+    def models(type: str = "", base_url: str = ""):
+        """Live list of available models for a provider type (best-effort)."""
+        from friday.core.providers.catalog import list_models
+
+        return {"models": list_models(type, base_url)}
+
+    @app.post("/api/upload")
+    async def upload(file: UploadFile = File(...)):
+        """Save an attached document and return its path so the agent can read it
+        (via read_document). Used by the chat UI's attach button."""
+        _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        safe_name = Path(file.filename or "upload").name
+        dest = _UPLOAD_DIR / safe_name
+        data = await file.read()
+        dest.write_bytes(data)
+        logger.info("[upload] saved %s (%d bytes)", dest, len(data))
+        return {"ok": True, "path": str(dest.resolve()), "name": safe_name, "bytes": len(data)}
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):
@@ -106,7 +527,11 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
         loop = asyncio.get_running_loop()
         outgoing: asyncio.Queue = asyncio.Queue()
         approvals: dict[str, queue.Queue] = {}
+        passwords: dict[str, queue.Queue] = {}
         counter = itertools.count()
+        # Per-session cancel flags so the Stop button only halts the chat it was
+        # pressed in — several turns (one per chat) can run concurrently here.
+        cancel_flags: dict[str, dict] = {}
 
         async def sender():
             while True:
@@ -126,20 +551,48 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
         def on_token(text: str):
             push({"type": "token", "text": text})
 
-        def approval(tool: str, args: dict) -> bool:
-            aid = str(next(counter))
-            resp_q: queue.Queue = queue.Queue()
-            approvals[aid] = resp_q
-            push({"type": "approval_request", "id": aid, "tool": tool, "args": args})
-            try:
-                return bool(resp_q.get(timeout=300))
-            except queue.Empty:
-                return False
+        def make_approval(session_id: str):
+            def approval(tool: str, args: dict) -> bool:
+                aid = str(next(counter))
+                resp_q: queue.Queue = queue.Queue()
+                approvals[aid] = resp_q
+                push({"type": "approval_request", "id": aid, "tool": tool,
+                      "args": args, "session_id": session_id})
+                try:
+                    return bool(resp_q.get(timeout=300))
+                except queue.Empty:
+                    return False
+            return approval
 
-        async def run_turn(text: str, session_id: Optional[str]):
+        def askpass(prompt: str):
+            """Request a sudo password from the UI. The secret is returned to the
+            caller (run_shell) and never logged or persisted here."""
+            pid = "pw" + str(next(counter))
+            resp_q: queue.Queue = queue.Queue()
+            passwords[pid] = resp_q
+            push({"type": "password_request", "id": pid, "prompt": prompt})
+            try:
+                return resp_q.get(timeout=180) or None
+            except queue.Empty:
+                return None
+
+        async def run_turn(text: str, session_id: Optional[str], mode: str,
+                           client_ref: Optional[str]):
+            # Resolve the session id up front so every event of this turn — tokens
+            # included — is tagged with it. New chats (no session_id) get a fresh
+            # session row here; the client maps its provisional ref to this id.
+            sid = session_id or service.db.create_session(persona=service.persona.id)
+            flag = {"stop": False}
+            cancel_flags[sid] = flag
+            push({"type": "session_started", "session_id": sid, "client_ref": client_ref})
+
+            def on_token_sid(t: str):
+                push({"type": "token", "text": t, "session_id": sid})
+
             try:
                 result = await asyncio.to_thread(
-                    service.run_turn, text, session_id, sink, on_token, approval
+                    service.run_turn, text, sid, sink, on_token_sid,
+                    make_approval(sid), mode, lambda: flag["stop"], askpass,
                 )
                 push({
                     "type": "turn_result",
@@ -147,22 +600,48 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
                     "session_id": result.session_id,
                     "tools_used": result.tools_used,
                 })
+                # Auto-title the chat from its first exchange (background, best-effort)
+                # so the sidebar shows a concise label, not the raw first message.
+                async def _title(tsid: str):
+                    title = await asyncio.to_thread(service.auto_title, tsid)
+                    if title:
+                        push({"type": "session_titled", "session_id": tsid, "title": title})
+                asyncio.create_task(_title(result.session_id))
             except Exception as exc:  # noqa: BLE001
                 logger.error("[ws] turn failed: %s", exc)
-                push({"type": "error", "message": str(exc)})
+                push({"type": "error", "message": str(exc), "session_id": sid})
+            finally:
+                cancel_flags.pop(sid, None)
 
         try:
             while True:
                 msg = await websocket.receive_json()
                 mtype = msg.get("type")
                 if mtype == "user_input":
-                    asyncio.create_task(run_turn(msg.get("text", ""), msg.get("session_id")))
+                    asyncio.create_task(run_turn(
+                        msg.get("text", ""), msg.get("session_id"),
+                        msg.get("mode", "agent"), msg.get("client_ref")))
                 elif mtype == "approval_response":
                     q = approvals.pop(msg.get("id"), None)
                     if q is not None:
                         q.put(bool(msg.get("approved")))
+                elif mtype == "password_response":
+                    # Hand the secret straight to the waiting tool; never log it.
+                    q = passwords.pop(msg.get("id"), None)
+                    if q is not None:
+                        q.put(msg.get("password") or "")
+                elif mtype == "stop":
+                    # Cancel only the turn for the named session (or every in-flight
+                    # turn when no session is given — e.g. a global stop).
+                    sid = msg.get("session_id")
+                    flags = [cancel_flags[sid]] if sid in cancel_flags else (
+                        list(cancel_flags.values()) if sid is None else [])
+                    for f in flags:
+                        f["stop"] = True
+                    push({"type": "stop_speaking"})  # tell the browser to hush
+                    push({"type": "stopped", "session_id": sid})
                 elif mtype == "stop_speech":
-                    service.stop_speaking()  # barge-in
+                    push({"type": "stop_speaking"})  # barge-in: cancel browser TTS
                 elif mtype == "ping":
                     push({"type": "pong"})
         except WebSocketDisconnect:
@@ -171,9 +650,33 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
             push(None)
             await sender_task
 
-    # Serve the built GUI (Phase 5) if present.
+    # Serve generated artifacts (diagrams / images / simulations) as downloadable
+    # static files so the chat/Learning-Room UI can render and download them.
+    _MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    app.mount("/api/media", StaticFiles(directory=str(_MEDIA_DIR)), name="media")
+
+    # Serve the built GUI (Phase 5) if present, with SPA fallback so client routes
+    # (/projects, /learning, …) resolve to index.html on a hard refresh.
     if _WEBUI_DIST.exists():
-        app.mount("/", StaticFiles(directory=str(_WEBUI_DIST), html=True), name="webui")
+        from starlette.responses import FileResponse
+
+        _assets = _WEBUI_DIST / "assets"
+        if _assets.exists():
+            app.mount("/assets", StaticFiles(directory=str(_assets)), name="assets")
+
+        # index.html must never be cached: it points at hashed JS/CSS, so a cached
+        # copy would keep loading a stale bundle (and stale UI) after an update.
+        _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate"}
+
+        @app.get("/{full_path:path}")
+        def spa(full_path: str):
+            candidate = _WEBUI_DIST / full_path
+            if full_path and candidate.is_file() and _WEBUI_DIST in candidate.resolve().parents:
+                # Hashed assets are immutable; everything else (incl. index.html) no-cache.
+                if candidate.suffix == ".html":
+                    return FileResponse(candidate, headers=_NO_CACHE)
+                return FileResponse(candidate)
+            return FileResponse(_WEBUI_DIST / "index.html", headers=_NO_CACHE)
 
     return app
 

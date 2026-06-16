@@ -1,7 +1,0 @@
-domain: dictation
-cases:
-  - { say: "start dictation", tool: start_dictation }
-  - { say: "take a dictation", tool: start_dictation }
-  - { say: "stop dictation", tool: end_dictation }
-  - { say: "finish dictation", tool: end_dictation }
-  - { say: "cancel dictation", tool: cancel_dictation }

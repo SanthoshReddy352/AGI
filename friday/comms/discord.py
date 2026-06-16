@@ -24,9 +24,12 @@ class DiscordChannel:
     def available(self) -> bool:
         return self._available
 
-    def send(self, text: str, username: str = "FRIDAY") -> bool:
+    def send(self, text: str, username: Optional[str] = None) -> bool:
         if not self.available or not text:
             return False
+        if not username:
+            from friday.config import assistant_name
+            username = assistant_name()
         threading.Thread(target=self._send_sync, args=(text, username), daemon=True).start()
         return True
 

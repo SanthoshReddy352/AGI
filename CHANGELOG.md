@@ -1,100 +1,132 @@
 # Changelog
 
-All notable changes to FRIDAY are documented here.
+All notable changes to this project are documented here. The format is loosely
+based on [Keep a Changelog](https://keepachangelog.com/).
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-Until `1.0.0`, minor version bumps may include breaking changes.
-
-## [Unreleased]
+## [2.1.0] — Project knowledge bases + Learning Room v2
 
 ### Added
-
-- **Open-source launch readiness** — `CHANGELOG.md`, GitHub CI workflow
-  (`pytest` matrix on Linux + Windows × Python 3.10–3.13, `ruff`, and the
-  intent eval/conflict gates), issue templates (bug report, feature request,
-  config), and a pull-request template mirroring the CONTRIBUTING "Definition
-  of done".
-- **`docs/ARCHITECTURE.md`** — launch-facing architecture overview with the
-  routing-pipeline + confidence-band diagram and the workflow state-machine
-  section (promoted from the historical `docs/architecture.md`).
-- **`docs/intent_recognition.md`** — the 5-layer hybrid router explained:
-  layers, confidence bands and thresholds, the eval harness, and a how-to for
-  adding an intent.
-- **Production-grade intent recognition** (Phase 2) — intent eval harness +
-  103-case golden corpus with a CI gate (`scripts/diagnostics/intent_eval.py`),
-  conflict/overlap detector, calibrated confidence infrastructure, and routing
-  observability (`scripts/diagnostics/routing_stats.py`).
-- **Multi-step workflow guards** (Phase 3):
-  - Unified slot-filling (`core/planning/slot_filling.py` — `SlotSpec` +
-    `SlotFiller`).
-  - Confirm-before-destructive guard (`core/workflows/confirmation.py`) over
-    `lock_screen`, `delete_goal`, `shutdown_assistant`, `forget_memory`, and
-    Home Assistant on/off, plus a memory-wipe preview. Toggle:
-    `routing.confirm_destructive`.
-  - Disambiguation / "which one did you mean?" guard
-    (`core/workflows/disambiguation.py`) over `search_indexed_files`,
-    `launch_app`, and `query_document`. Toggle: `routing.disambiguate`.
-  - Reminder slot-fill migrated to the live `set_reminder` two-phase YAML
-    template; the `ReminderWorkflow` shim was retired.
-
-### Changed
-
-- **Calendar events are now Google-owned.** The local SQLite calendar-event
-  capabilities were removed; `create_calendar_event` / `cancel_calendar_event`
-  resolve to the Google Calendar (WorkspaceAgent) path, and move/reschedule
-  retargets to `update_calendar_event`. Reminders remain a local feature.
-- **Cross-platform hardening** (Phase 1) — subprocess calls pass
-  `encoding="utf-8", errors="replace"` consistently (fixes Windows cp1252
-  `UnicodeDecodeError`); `core/shell_prefix.py` falls back to `COMSPEC` on
-  Windows instead of a non-existent `/bin/sh`; `scratch/` is untracked so a
-  fresh clone collects tests cleanly.
-- `docs/config_reference.md` — documented the Phase 3 `routing.*` confidence,
-  learning, and guard keys, plus the `code_execution` and `file_index`
-  sections.
+- **Project documents (multi-document RAG)** — upload up to 25 files (10 MB
+  each) per project. Each file is text-extracted, screened for prompt injection
+  (`core/docscan.py`), chunked structure-aware with overlap, and indexed into
+  SQLite FTS5 (`core/docindex.py`). The agent grounds project chats via
+  `search_project_documents` (BM25 ranking, per-document diversity, neighbour
+  stitching, file/section citations) with a data-not-instructions guard around
+  every excerpt. Flagged files are quarantined out of retrieval until the user
+  explicitly trusts them (Documents panel in the project view).
+- **Cross-session project continuity** — a project chat's system prompt now
+  carries summaries of the project's earlier conversations (auto-summarized
+  when a new project chat opens) plus a `search_project_history` tool, so a
+  session days later picks up where the last one left off.
+- **Learning Room: path chat** — each topic's overview thread is now a
+  dedicated "Path chat" (button on the dashboard): ask about the path, reshape
+  it, and set **standing teaching preferences** (`set_teaching_preference`,
+  e.g. "research every answer") that apply in every module from then on.
+- **Learning Room: React Flow path view** — a Claude-style List/Flow toggle on
+  the topic dashboard; the Flow view renders the path as generous module cards
+  on a pannable, zoomable infinite canvas (status colors, minimap, click to
+  open a module).
+- **Syllabus → path** — upload a school/college syllabus (PDF/DOCX/…) in the
+  "New topic" modal; FRIDAY screens it (injection or non-syllabus content is
+  flagged, nothing is built), verifies it is a syllabus, infers the learner's
+  level automatically, and builds the module path from it.
+- **Learning Telegram nudges** — module-completion progress pings
+  (`learning.notify_progress`) and "it's been a while" reminders for idle
+  topics (`learning.nudge_after_days`, riding the opt-in
+  `scheduler.run_in_background` switch).
 
 ### Fixed
+- **Path chat opened as a blank "new chat"** — the overview session is now
+  seeded with a path-chat welcome (new `POST /api/learning/{id}/session`), and
+  its breadcrumb shows `Learning Room / Topic / Path chat` with the back arrow
+  landing on the topic dashboard.
+- **Quiz checks drifted into plain text** — the teaching contract now mandates
+  `pose_quiz` for every comprehension check (plain-text checks aren't tracked
+  and don't count) and at least one visual per concept, not just the first.
+- **Module completion was unreliable / chats mixed** — completion now goes
+  through an explicit confidence gate ("do you feel confident about this
+  module?"): yes → the teacher MUST call `mark_module_complete`; no → it probes
+  the shaky ideas and re-teaches. Completion drops a "Module complete →
+  Continue to <next module>" card into the chat (opens the next module's own
+  thread), and a finished module's chat becomes review-only — it refuses to
+  teach new content and redirects to the next module, so lessons never bleed
+  between module threads.
+- **Path state-awareness** — quizzes and completions are attributed to the
+  module whose *thread* they happen in (not the global "current" pointer), and
+  jumping ahead to a not-yet-reached module asks for confirmation first.
 
-- Several deterministic-routing bugs surfaced by the eval harness — e.g. "end
-  the focus session" routing to `start_focus_session`, "take a note" routing to
-  `start_dictation`, and missing routes for "export my memories" / "how much
-  RAM am I using" / "is it going to rain today".
-- Removed a dead duplicate `handle_update` in `modules/goals/plugin.py` that
-  shadowed the disambiguation-aware definition.
+- **Broken inline images ("Not Found")** — `render_diagram` retries transient
+  mermaid-cli failures and rescues `-1`-suffixed output files; the contract and
+  tool errors forbid the model from fabricating `/api/media/…` links; dead
+  links degrade to an "image — unavailable" chip instead of a broken icon.
+- **Turns ending on a dangling "Check:"** — announcing a check now obligates a
+  `pose_quiz` call in the same turn.
+- **Genuine syllabi flagged on upload** — scanner false positives fixed
+  ("you are now …" needs persona-changing language; hidden-unicode threshold
+  raised above normal PDF-extraction noise) and the syllabus analysis retries
+  once with an explicitly generous is-it-a-syllabus rule.
 
-## [0.1.0] — 2026-05-29
+- **Quiz cards vanished on chat reopen** — posed quizzes are now persisted as
+  `quiz` turns (kept out of the model's message history) and restored in place
+  — after the assistant message that posed them, already answered with the
+  learner's pick — when the chat is reopened.
+- **Dashboard quiz history is now clickable** — each check expands to the full
+  question: every option (correct one ticked, a wrong pick marked) plus the
+  explanation; the full quiz payload is stored with each result.
 
-Initial public-preview snapshot of FRIDAY: a local-first, voice-driven AI
-desktop assistant for Linux and Windows.
+- **"Could not parse the syllabus analysis"** — the analysis JSON now parses
+  even when the model wraps it in prose or code fences (balanced-object
+  extraction, string-aware); verified end-to-end against the real failing PDF.
+  Upload failures are no longer mislabelled "Document flagged" — only actual
+  security flags say that; transient errors say "try again". Syllabus warnings
+  are capped to a short readable note.
+- **Polish & optimization** — auto-sent "[build path]" prompts are hidden when
+  reopening the path chat; persisted quiz turns are excluded from conversation
+  search (no JSON noise in recall); topic resolution is skipped for non-learning
+  chats on session open; React Flow is code-split and loads only when the Flow
+  view is opened (main bundle 806→627 kB).
+
+### Changed
+- **Quizzes no longer dead-end** — answering a quiz hands the result back to
+  the teacher, which must keep the lesson moving: next in-module step, or
+  module completion (with celebration) when everything is covered.
+- **Teaching contract** — research-backed pedagogy: recall warm-ups (spaced
+  retrieval practice), one running example continued across modules (module
+  recaps persist via `mark_module_complete(recap=…)`), Socratic hints before
+  answers, early-exit when the learner's goal is met, and a hard curriculum
+  boundary: content reserved for later modules is never taught or teased early.
+
+## [2.0.0] — Cloud-only rebuild
+
+FRIDAY was rebuilt from the ground up as a **cloud-only** assistant. The entire
+application now lives in the `friday/` package; the legacy local-model /
+intent-recognizer / PyQt stack was removed.
 
 ### Added
+- **Provider-agnostic brain** — native Anthropic, OpenAI, and Google providers
+  plus a generic OpenAI-compatible client (Ollama, LM Studio, opencode, custom
+  base URL), with a config-driven fallback chain.
+- **One agent loop** — generate → call tools → loop → final answer, with token
+  streaming, native tool calling, and a bounded/cancellable turn.
+- **Tool registry** — ~55 auto-discovered tools across files, shell/system, web,
+  browser, network, security, weather/news, smart home, vision, documents,
+  scheduler, memory, tasks/goals, focus, skills, comms, workspace, and MCP.
+- **Cross-session memory** — single SQLite store (sessions/turns/facts with FTS5),
+  curated `USER.md` / `MEMORY.md` notes, and session summaries.
+- **Skill system** — `SKILL.md` procedural memory with a learning loop
+  (`create_skill` / `update_skill`).
+- **Voice** — local Piper TTS (spoken answers + narration) and push-to-talk STT,
+  both degrading gracefully without audio hardware.
+- **Web UI** — React + Tailwind chat with a live tool/progress timeline, mode
+  switch (chat/agent), stop button, attachments, and a settings panel.
+- **Messaging bridges** — Telegram (inbound + outbound) and Discord; MCP client.
+- **Configurable assistant name** — `assistant.name` in `friday/config.yaml`
+  (or the `ASSISTANT_NAME` env var) renames the assistant everywhere from one place.
 
-- **Voice I/O** — "Hey Friday" wake word (Porcupine), `faster-whisper` STT,
-  Piper neural TTS with barge-in; text-chat fallback.
-- **Conversation** — local chat model with session-aware turns, custom
-  personas, and a three-tier memory (episodic / semantic / procedural) backed
-  by SQLite domain stores (`core/stores/`) and a Chroma vector index.
-- **v2 turn orchestration** — `TurnOrchestrator` with a 5-layer hybrid router
-  (deterministic intent → route scorer → embedding → lexical → LLM planner),
-  selective executor, and optional LangGraph execution engine.
-- **System control** — brightness, volume, screen lock/unlock, screenshots,
-  app launch, window queries, clipboard.
-- **Document intelligence** — local RAG over PDFs/Office/Markdown
-  (`markitdown` + Chroma).
-- **Vision (VLM)** — screenshot explainer, OCR, screen summarizer, UI-element
-  finder, and code debugger via a local SmolVLM2 model.
-- **Online skills (opt-in)** — browser automation (Playwright/Selenium),
-  web/quick-answer search, news & world monitoring, weather; gated behind
-  per-turn online consent.
-- **Productivity** — reminders, notes, tasks, goals, focus sessions,
-  dictation, and Google Calendar events.
-- **Extensibility** — capability registry across 28 plugin modules, optional
-  external MCP client.
-- **Privacy & safety** — ask-before-online consent, scoped security tooling
-  (lab mode), and a local audit log.
-- **Cross-platform** — one codebase for Linux and Windows with `setup.sh` /
-  `setup.ps1` parity.
-
-[Unreleased]: https://github.com/SanthoshReddy352/Friday_Linux/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/SanthoshReddy352/Friday_Linux/releases/tag/v0.1.0
+### Removed
+- The entire legacy v1 tree: intent recognizer, planning/routing layers, the
+  domain stores, the local GGUF/llama stack, kokoro, the PyQt GUI, the terminal
+  CLI, and the old Next.js docs site.
+- The legacy root scaffolding (`config.yaml`, `requirements.txt`, `setup.sh/ps1`,
+  `SETUP_GUIDE*.md`, `STATUS.md`) and the `docs/` planning archive. Setup and run
+  instructions now live in the [README](README.md).

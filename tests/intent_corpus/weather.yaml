@@ -1,8 +1,0 @@
-domain: weather
-cases:
-  - { say: "what's the weather", tool: get_weather }
-  - { say: "what's the weather in Mumbai", tool: get_weather }
-  - { say: "weather forecast for tomorrow", tool: get_weather }
-  - { say: "is it going to rain today", tool: get_weather }
-  # negatives
-  - { say: "what causes weather patterns", no_match: true }

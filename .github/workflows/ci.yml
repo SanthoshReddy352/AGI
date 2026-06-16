@@ -14,11 +14,11 @@ permissions:
   contents: read
 
 jobs:
-  # Fast, dependency-light signal: lint + the launch-critical intent gates.
-  # Runs first so an obviously-broken PR fails in ~1 min instead of waiting
-  # for the full native-dependency matrix to install.
-  lint-and-intent:
-    name: Lint + intent gates
+  # FRIDAY v2 is a cloud-only (API-brain) app living entirely under `friday/`.
+  # The legacy intent/PyQt/llama stack was purged in Phase 8, so CI now lints
+  # and tests only the v2 package.
+  lint:
+    name: Lint (ruff)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,36 +26,22 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-
-      - name: Install lint + intent-test deps
+      - name: Install ruff
         run: |
           python -m pip install --upgrade pip
-          # The intent layer is pure-Python; install only what its imports need
-          # rather than the full native stack (llama.cpp, Qt, Chroma, …).
-          pip install ruff pytest pyyaml rapidfuzz python-dotenv
-
+          pip install ruff
       - name: Ruff (lint)
-        run: ruff check .
+        run: ruff check friday/
 
-      - name: Intent eval gate (golden corpus)
-        run: python scripts/diagnostics/intent_eval.py
-
-      - name: Intent eval + conflict tests
-        run: python -m pytest tests/test_intent_eval.py tests/test_intent_conflicts.py -q
-
-  # Full suite across the supported platform/Python matrix.
   test:
     name: pytest (${{ matrix.os }}, py${{ matrix.python-version }})
-    needs: lint-and-intent
+    needs: lint
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
-    env:
-      # Run PyQt6 head-less so GUI imports don't need a display server.
-      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -67,13 +53,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y portaudio19-dev libegl1 libgl1
+          sudo apt-get install -y portaudio19-dev
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r friday/requirements.txt
           pip install pytest
 
-      - name: Run test suite
-        run: python -m pytest -q
+      - name: Run v2 test suite
+        run: python -m pytest friday/tests/ -q
