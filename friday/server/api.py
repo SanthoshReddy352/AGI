@@ -20,11 +20,13 @@ from __future__ import annotations
 import asyncio
 import itertools
 import queue
+import re
 import threading
+from datetime import datetime as _dt
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -56,6 +58,19 @@ class MemoryClearBody(BaseModel):
     scope: str = "all"  # facts | conversations | notes | all
 
 
+class ConfiguredProvidersBody(BaseModel):
+    providers: list = []   # [{id?, label, type, base_url, api_key_env}, …]
+
+
+class ConfiguredModelsBody(BaseModel):
+    models: list = []   # [{id?, label, provider, model}, …]
+
+
+class PackExportBody(BaseModel):
+    skills: list = []   # skill names to include
+    tools: list = []    # tool file names to include
+
+
 class ProjectBody(BaseModel):
     name: str = ""
     description: str = ""
@@ -80,6 +95,11 @@ class LearningBody(BaseModel):
 
 class PlanBody(BaseModel):
     modules: list = []
+
+
+class SwitchModelBody(BaseModel):
+    session_id: str = ""
+    model: str = ""
 
 
 class QuizResultBody(BaseModel):
@@ -143,6 +163,25 @@ def _module_intro(topic: Optional[dict], module: Optional[dict]) -> str:
     return "\n".join(lines)
 
 
+def _switch_intro(topic: Optional[dict], module: Optional[dict],
+                  model_label: str, recap: str) -> str:
+    """The seeded opening when the learner switches the model mid-topic: it tells
+    them which brain is teaching now, recaps what was covered so the new model isn't
+    cold, and points at the next step. Mirrors the warm module-intro template."""
+    topic = topic or {}
+    tname = topic.get("title") or "this topic"
+    mtitle = (module or {}).get("title") or tname
+    lines = [f"🔄 You're now learning with **{model_label}**. I've picked up right where we "
+             f"left off — no need to start over."]
+    if (recap or "").strip():
+        lines.append("\n**Where we are so far:**\n" + recap.strip())
+    else:
+        lines.append(f"\nWe're just getting going on **{mtitle}**.")
+    lines.append("\nReady to keep going? Say **“I'm ready”** (or ask me anything) and we'll "
+                 "continue from here.")
+    return "\n".join(lines)
+
+
 def _restore_turns(db, session_id: str) -> list[dict]:
     """Session history for the UI, with persisted quiz cards restored.
 
@@ -201,6 +240,84 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
     def tools():
         return {"tools": service.registry.definitions()}
 
+    # -- Skill & Tool packs (export / import) ------------------------------
+    @app.get("/api/pack/items")
+    def pack_items():
+        """User-created skills + tools available to bundle into a pack."""
+        from friday.core import packs
+        from friday.tools.authoring import USER_TOOLS_DIR
+        if service.skills is None:
+            return {"skills": [], "tools": []}
+        return packs.list_items(service.skills, USER_TOOLS_DIR)
+
+    @app.post("/api/pack/export")
+    def pack_export(body: PackExportBody):
+        """Build a pack zip from the selection and save it under ~/.friday/exports."""
+        from friday.core import packs
+        from friday.config import assistant_name
+        from friday.tools.authoring import USER_TOOLS_DIR
+        if service.skills is None:
+            return {"ok": False, "error": "skills unavailable"}
+        name = assistant_name(service.config)
+        data = packs.build_pack(service.skills, USER_TOOLS_DIR,
+                                body.skills, body.tools, created_by=name)
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "friday"
+        filename = f"{slug}-pack-{_dt.now():%Y%m%d-%H%M}.zip"
+        export_dir = Path("~/.friday/exports").expanduser()
+        export_dir.mkdir(parents=True, exist_ok=True)
+        dest = export_dir / filename
+        dest.write_bytes(data)
+        logger.info("[packs] exported %s (%d bytes)", dest, len(data))
+        return {"ok": True, "filename": filename, "path": str(dest),
+                "bytes": len(data)}
+
+    @app.get("/api/pack/download/{filename}")
+    def pack_download(filename: str):
+        from starlette.responses import FileResponse, JSONResponse
+        safe = Path(filename).name
+        dest = Path("~/.friday/exports").expanduser() / safe
+        if not dest.exists():
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return FileResponse(dest, media_type="application/zip", filename=safe)
+
+    @app.post("/api/pack/inspect")
+    async def pack_inspect(file: UploadFile = File(...)):
+        """Describe an uploaded pack without writing anything (import preview)."""
+        from friday.core import packs
+        from friday.tools.authoring import USER_TOOLS_DIR
+        if service.skills is None:
+            return {"error": "skills unavailable"}
+        data = await file.read()
+        try:
+            return packs.inspect_pack(data, service.skills, USER_TOOLS_DIR)
+        except ValueError as exc:
+            return {"error": str(exc)}
+
+    @app.post("/api/pack/install")
+    async def pack_install(
+        file: UploadFile = File(...),
+        approved_tools: str = Form(""),   # comma-separated tool names the user OK'd
+        skills: str = Form(""),           # comma-separated skill names to install
+        overwrite: str = Form("false"),
+    ):
+        """Install selected skills + explicitly approved tools from a pack."""
+        from friday.core import packs
+        from friday.tools.authoring import USER_TOOLS_DIR
+        if service.skills is None:
+            return {"error": "skills unavailable"}
+        data = await file.read()
+        split = lambda s: [x.strip() for x in s.split(",") if x.strip()]  # noqa: E731
+        try:
+            summary = packs.install_pack(
+                data, service.skills, USER_TOOLS_DIR, service.registry,
+                approved_tools=split(approved_tools),
+                skill_names=split(skills) if skills.strip() else None,
+                overwrite=overwrite.lower() in ("1", "true", "yes"),
+            )
+        except ValueError as exc:
+            return {"error": str(exc)}
+        return {"ok": True, "summary": summary}
+
     @app.post("/api/persona")
     def set_persona(body: PersonaBody):
         service.set_persona(body.id)
@@ -239,6 +356,7 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
         return {"session_id": session_id,
                 "turns": _restore_turns(service.db, session_id),
                 "project": project, "topic": topic,
+                "model": (meta.get("model") or "").strip(),
                 "title": (meta.get("title") or "").strip()}
 
     @app.delete("/api/sessions/{session_id}")
@@ -435,6 +553,29 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
             service.db.add_turn(sid, "assistant", _module_intro(topic, module))
         return {"session_id": sid}
 
+    @app.post("/api/learning/switch_model")
+    def learning_switch_model(body: SwitchModelBody):
+        """Switch a Learning-Room thread to a different configured model WITHOUT a cold
+        restart: summarize the current session, spin up a fresh session bound to the new
+        model, re-point the topic/module onto it, and seed a recap so the new model
+        continues seamlessly. Returns the new session id to open."""
+        old_sid = body.session_id
+        topic = service.db.get_topic_by_session(old_sid) if old_sid else None
+        if not topic:
+            return {"ok": False, "error": "Not a learning session."}
+        module = next((m for m in (topic.get("plan") or [])
+                       if m.get("session_id") == old_sid), None)
+        label = next((m.get("label") for m in service.configured_models()
+                      if m.get("id") == body.model), None) or body.model or "the default model"
+        recap = service.learning_recap(old_sid, topic, module)
+        new_sid = service.db.create_session_in(kind="learning")
+        service.db.set_session_model(new_sid, body.model or None)
+        service.db.repoint_learning_session(old_sid, new_sid)
+        service.db.add_turn(new_sid, "assistant", _switch_intro(topic, module, label, recap))
+        logger.info("[learning] model switch %s → %s (session %s → %s)",
+                    (module or {}).get("title") or topic["title"], label, old_sid[:8], new_sid[:8])
+        return {"ok": True, "session_id": new_sid, "model": body.model, "recap": recap}
+
     @app.post("/api/learning/{topic_id}/quiz")
     def record_quiz(topic_id: str, body: QuizResultBody):
         service.db.record_quiz(topic_id, body.question, body.correct,
@@ -480,8 +621,13 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
         written = set_env_values(body.env) if body.env else []
         logger.info("[settings] updated config keys=%s env keys=%s",
                     list((body.config or {}).keys()), written)
+        # Apply live — rebuild the provider so a changed brain / base_url / API key
+        # takes effect on the next turn, no restart. (Runs when the provider config
+        # OR an env key changed; env-only edits rebuild against the current config.)
+        if merged is not None or written:
+            service.apply_config(merged)
         return {"ok": True, "config": merged, "env_written": written,
-                "note": "Some changes (provider/model/keys) take effect on restart."}
+                "note": "Applied live — no restart needed."}
 
     @app.post("/api/memory/clear")
     def clear_memory(body: MemoryClearBody):
@@ -502,12 +648,79 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
             },
         }
 
-    @app.get("/api/models")
-    def models(type: str = "", base_url: str = ""):
-        """Live list of available models for a provider type (best-effort)."""
-        from friday.core.providers.catalog import list_models
+    @app.get("/api/env_status")
+    def env_status(keys: str = ""):
+        """Which of the given .env keys are set (true/false) — so the UI can show
+        a “key set” badge per provider without ever exposing the value. ``keys`` is
+        a comma-separated list of env var names."""
+        import os as _os
+        names = [k.strip() for k in (keys or "").split(",") if k.strip()]
+        return {"env_set": {k: bool(_os.environ.get(k)) for k in names}}
 
-        return {"models": list_models(type, base_url)}
+    @app.get("/api/configured_providers")
+    def configured_providers():
+        """The user's named provider connections (for the Providers tab and the
+        provider picker in the Models tab)."""
+        return {"providers": service.configured_providers()}
+
+    @app.post("/api/configured_providers")
+    def save_configured_providers(body: ConfiguredProvidersBody):
+        """Persist the named provider connections to config.local.yaml and apply
+        them live (no restart): models built on these providers rebuild on the
+        next turn with the new type/base_url/key."""
+        from friday.config import configured_providers as _norm
+        from friday.config import update_config
+
+        normalised = _norm({"providers": body.providers})
+        update_config({"providers": normalised})
+        applied = service.reload_providers(normalised)
+        logger.info("[settings] saved %d provider(s)", len(applied))
+        return {"ok": True, "providers": applied}
+
+    @app.get("/api/configured_models")
+    def configured_models():
+        """The user's curated, switchable model profiles (for the chat switcher
+        and the Models settings tab)."""
+        return {"models": service.configured_models()}
+
+    @app.post("/api/configured_models")
+    def save_configured_models(body: ConfiguredModelsBody):
+        """Persist the model-profile list to config.local.yaml and apply it live
+        (no restart): new profiles are immediately switchable in chat."""
+        from friday.config import configured_models as _norm
+        from friday.config import update_config
+
+        # Normalise (guarantee ids) before persisting so saved == served.
+        normalised = _norm({"models": body.models})
+        update_config({"models": normalised})
+        applied = service.reload_models(normalised)
+        logger.info("[settings] saved %d model profile(s)", len(applied))
+        return {"ok": True, "models": applied}
+
+    @app.get("/api/models")
+    def models(type: str = "", base_url: str = "", api_key: str = "", provider_id: str = ""):
+        """Live list of available models (best-effort).
+
+        Pass ``provider_id`` to list a configured provider's models — the server
+        resolves its type/base_url and reads its API key from that provider's own
+        ``.env`` var. (Or pass ``type``/``base_url``/``api_key`` directly.) Returns
+        the names plus ``source`` (live/fallback) and a human ``error`` so the UI
+        can explain a short or empty list instead of silently showing defaults.
+        """
+        from friday.core.providers.catalog import list_models_result
+
+        if provider_id:
+            conn = next((p for p in service.configured_providers()
+                         if p["id"] == provider_id), None)
+            if conn is None:
+                return {"models": [], "source": "fallback",
+                        "error": f"Unknown provider “{provider_id}”."}
+            type = type or conn.get("type", "")
+            base_url = base_url or conn.get("base_url", "")
+            if not api_key and conn.get("api_key_env"):
+                import os as _os
+                api_key = _os.environ.get(conn["api_key_env"], "") or ""
+        return list_models_result(type, base_url, api_key)
 
     @app.post("/api/upload")
     async def upload(file: UploadFile = File(...)):
@@ -577,14 +790,25 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
                 return None
 
         async def run_turn(text: str, session_id: Optional[str], mode: str,
-                           client_ref: Optional[str]):
+                           client_ref: Optional[str], model: Optional[str] = None):
             # Resolve the session id up front so every event of this turn — tokens
             # included — is tagged with it. New chats (no session_id) get a fresh
-            # session row here; the client maps its provisional ref to this id.
-            sid = session_id or service.db.create_session(persona=service.persona.id)
+            # session row here, bound to the chosen model; the client maps its
+            # provisional ref to this id.
+            sid = session_id or service.db.create_session(
+                persona=service.persona.id, model=model or None)
+            # A session's model is sticky: the first turn binds it, later turns use
+            # the bound model (switching mid-chat starts a NEW session, by design).
+            sess = service.db.get_session(sid)
+            bound = (sess or {}).get("model") or ""
+            if not bound and model:
+                service.db.set_session_model(sid, model)
+                bound = model
+            effective_model = bound or model or ""
             flag = {"stop": False}
             cancel_flags[sid] = flag
-            push({"type": "session_started", "session_id": sid, "client_ref": client_ref})
+            push({"type": "session_started", "session_id": sid, "client_ref": client_ref,
+                  "model": effective_model})
 
             def on_token_sid(t: str):
                 push({"type": "token", "text": t, "session_id": sid})
@@ -593,6 +817,7 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
                 result = await asyncio.to_thread(
                     service.run_turn, text, sid, sink, on_token_sid,
                     make_approval(sid), mode, lambda: flag["stop"], askpass,
+                    effective_model,
                 )
                 push({
                     "type": "turn_result",
@@ -620,7 +845,8 @@ def create_app(service: Optional[FridayService] = None) -> FastAPI:
                 if mtype == "user_input":
                     asyncio.create_task(run_turn(
                         msg.get("text", ""), msg.get("session_id"),
-                        msg.get("mode", "agent"), msg.get("client_ref")))
+                        msg.get("mode", "agent"), msg.get("client_ref"),
+                        msg.get("model")))
                 elif mtype == "approval_response":
                     q = approvals.pop(msg.get("id"), None)
                     if q is not None:

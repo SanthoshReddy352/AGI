@@ -72,6 +72,9 @@ graphify-out/
 responses/
 plan/
 
+# pywebview disk cache (warm-start cache for the native desktop window)
+friday/.webview/
+
 # Ad-hoc scratch notes (not part of the project)
 notes.txt
 notes.md

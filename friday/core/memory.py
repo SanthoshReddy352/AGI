@@ -169,6 +169,8 @@ _SESSION_MIGRATIONS = [
     "ALTER TABLE sessions ADD COLUMN project_id TEXT",
     "ALTER TABLE sessions ADD COLUMN kind TEXT DEFAULT 'chat'",
     "ALTER TABLE sessions ADD COLUMN meta TEXT",
+    # The model profile id this session is bound to (model switching = new session).
+    "ALTER TABLE sessions ADD COLUMN model TEXT",
     "ALTER TABLE learning_topics ADD COLUMN insights TEXT",
     "ALTER TABLE learning_topics ADD COLUMN preferences TEXT",
     # Full quiz payloads (not just question + right/wrong) so the dashboard can
@@ -228,16 +230,26 @@ class Database:
 
     # -- sessions ----------------------------------------------------------
 
-    def create_session(self, persona: str = "friday_core") -> str:
+    def create_session(self, persona: str = "friday_core",
+                        model: Optional[str] = None) -> str:
         sid = str(uuid.uuid4())
         now = _now()
         with self._lock:
             self.conn.execute(
-                "INSERT INTO sessions (id, created_at, updated_at, persona) VALUES (?,?,?,?)",
-                (sid, now, now, persona),
+                "INSERT INTO sessions (id, created_at, updated_at, persona, model) "
+                "VALUES (?,?,?,?,?)",
+                (sid, now, now, persona, model or None),
             )
             self.conn.commit()
         return sid
+
+    def set_session_model(self, session_id: str, model: Optional[str]) -> None:
+        """Bind a session to a model profile id (its 'brain' for every turn)."""
+        with self._lock:
+            self.conn.execute(
+                "UPDATE sessions SET model=? WHERE id=?", (model or None, session_id)
+            )
+            self.conn.commit()
 
     def touch_session(self, session_id: str) -> None:
         with self._lock:
@@ -446,7 +458,7 @@ class Database:
         params.append(limit)
         with self._lock:
             rows = self.conn.execute(
-                "SELECT s.id, s.created_at, s.updated_at, s.summary, s.project_id, s.title AS custom_title, "
+                "SELECT s.id, s.created_at, s.updated_at, s.summary, s.project_id, s.model, s.title AS custom_title, "
                 "(SELECT t.content FROM turns t WHERE t.session_id=s.id AND t.role='user' "
                 " ORDER BY t.id LIMIT 1) AS first_msg "
                 "FROM sessions s "
@@ -470,7 +482,7 @@ class Database:
         """Row for a session: kind/project_id/title/meta (for scoped prompts)."""
         with self._lock:
             row = self.conn.execute(
-                "SELECT id, created_at, updated_at, persona, summary, title, project_id, kind, meta "
+                "SELECT id, created_at, updated_at, persona, summary, title, project_id, kind, meta, model "
                 "FROM sessions WHERE id=?", (session_id,)
             ).fetchone()
         return dict(row) if row else None
@@ -857,6 +869,25 @@ class Database:
                     self._save_topic_fields(topic_id, plan=plan)
                 return m["session_id"]
         return None
+
+    def repoint_learning_session(self, old_session_id: str,
+                                 new_session_id: str) -> Optional[dict]:
+        """Move a learning thread (the path overview OR a module) onto a new session
+        id — used when switching the model mid-topic: the new session carries a recap
+        of the old one, so the learner continues instead of cold-starting. Returns the
+        owning topic, or None if the old session isn't a learning thread."""
+        topic = self.get_topic_by_session(old_session_id)
+        if not topic:
+            return None
+        if topic.get("session_id") == old_session_id:  # the path/overview thread
+            return self._save_topic_fields(topic["id"], session_id=new_session_id)
+        plan = topic.get("plan") or []
+        changed = False
+        for m in plan:
+            if m.get("session_id") == old_session_id:
+                m["session_id"] = new_session_id
+                changed = True
+        return self._save_topic_fields(topic["id"], plan=plan) if changed else topic
 
     def mark_module(self, topic_id: str, module_id: str, status: str = "done") -> Optional[dict]:
         topic = self.get_learning_topic(topic_id)

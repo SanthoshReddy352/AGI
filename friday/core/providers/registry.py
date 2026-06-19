@@ -45,7 +45,7 @@ PROVIDER_TYPES: dict[str, type[Provider]] = {
 _TYPE_DEFAULTS: dict[str, dict] = {
     "lmstudio": {"base_url": "http://localhost:1234/v1"},
     "ollama": {"base_url": "http://localhost:11434/v1"},
-    "opencode": {"base_url": "https://api.opencode-zen.com/v1"},
+    "opencode": {"base_url": "https://opencode.ai/zen/v1"},
 }
 
 
@@ -111,6 +111,17 @@ class ProviderChain(Provider):
                 "No LLM provider is available. " + reasons + ". "
                 "If you launched with the system Python, start with the project venv "
                 "(.venv/bin/python -m friday) so the provider SDK is installed.")
+        # A rate-limited free tier is the most common reason the whole chain falls
+        # over — surface it in plain language (the raw 429 JSON is opaque to a user)
+        # so they know it's a quota, not a crash, and what to do about it.
+        blob = str(last_exc).lower()
+        if "429" in blob or "rate limit" in blob or "freeusagelimit" in blob or "quota" in blob:
+            raise ProviderError(
+                "Every configured model is rate-limited right now (free-tier usage "
+                "limit). This isn't a bug in the assistant — the brain (the LLM) is "
+                "temporarily refusing requests. Wait a minute and retry, or set a more "
+                "reliable model in friday/config.yaml (e.g. an Anthropic/OpenAI key). "
+                f"[detail: {last_exc}]")
         raise ProviderError(f"All providers failed. Last error: {last_exc}")
 
     def test_connection(self) -> bool:

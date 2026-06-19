@@ -43,10 +43,11 @@ class CommsManager:
         return sent
 
     def start_inbound(self, on_message: Callable[[str], str],
-                      name: Optional[str] = None) -> None:
+                      name: Optional[str] = None,
+                      get_models: Optional[Callable[[], list]] = None) -> None:
         if not self.telegram.available or self._inbound is not None:
             return
-        self._inbound = TelegramInbound(self.telegram, on_message)
+        self._inbound = TelegramInbound(self.telegram, on_message, get_models=get_models)
         self._inbound.start()
         if self.telegram.available:
             if not name:

@@ -111,6 +111,7 @@ _HELP = (
     "• 🎤 voice message — I'll transcribe and answer it\n"
     "• !<cmd> — run a shell command, e.g. !df -h\n"
     "• /mode chat|agent — switch mode\n"
+    "• /model — switch the AI model (pick by number)\n"
     "• /new — start a fresh conversation\n"
     "• /clear — wipe my memory\n"
     "• send a document — I'll read it\n"
@@ -122,6 +123,7 @@ _BOT_COMMANDS = [
     {"command": "help", "description": "Show what I can do"},
     {"command": "new", "description": "Start a fresh conversation"},
     {"command": "mode", "description": "Switch mode — /mode chat or /mode agent"},
+    {"command": "model", "description": "Switch the AI model (pick by number)"},
     {"command": "clear", "description": "Wipe my memory"},
 ]
 
@@ -159,14 +161,20 @@ class TelegramInbound:
     _POLL_TIMEOUT = 20
 
     def __init__(self, channel: TelegramChannel,
-                 on_message: Callable[[str, Optional[str], str], tuple]):
+                 on_message: Callable[..., tuple],  # (text, session_id, mode, askpass, model) -> (reply, sid)
+                 get_models: Optional[Callable[[], list]] = None):
         self._channel = channel
         self._on_message = on_message
+        # Returns the configured model profiles (for the /model picker). Optional
+        # so older callers / tests still work (no picker → /model says none set).
+        self._get_models = get_models or (lambda: [])
         self._offset = 0
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._session_id: Optional[str] = None
         self._mode = "agent"
+        self._model_id: Optional[str] = None       # chosen brain (None = default)
+        self._pending_models: Optional[list] = None  # set while awaiting a number
         # Pending sudo-password request (set while a turn waits for a reply).
         self._pw_lock = threading.Lock()
         self._pw_event: Optional[threading.Event] = None
@@ -254,6 +262,10 @@ class TelegramInbound:
             return
         if not text:
             return
+        # A /model picker is open → this message is the user's number choice.
+        if self._pending_models is not None and not text.startswith("/"):
+            self._handle_model_selection(text)
+            return
         if self._handle_command(text):
             return
         threading.Thread(target=self._process, args=(text, msg_id), daemon=True).start()
@@ -304,7 +316,7 @@ class TelegramInbound:
             self._session_id = None
             self._channel.send("Started a fresh conversation.")
             return True
-        if low.startswith("/mode"):
+        if low == "/mode" or low.startswith("/mode "):
             arg = text[5:].strip().lower()
             if arg in ("chat", "agent"):
                 self._mode = arg
@@ -312,18 +324,70 @@ class TelegramInbound:
             else:
                 self._channel.send(f"Current mode: {self._mode}. Use /mode chat or /mode agent.")
             return True
+        if low == "/model":
+            self._show_model_menu()
+            return True
         if low == "/clear":
             self._run_turn("Clear all of my memory.")
             return True
         # Unknown /command → let the agent interpret it.
         return False
 
+    # -- model switching (numbered picker) ---------------------------------
+
+    def _show_model_menu(self) -> None:
+        """List the configured models numbered, and wait for a number reply."""
+        models = list(self._get_models() or [])
+        if not models:
+            self._channel.send(
+                "No models are configured yet. Add some in Settings → Models, "
+                "then use /model to switch.")
+            return
+        lines = ["Pick a model — reply with its number:", ""]
+        for i, m in enumerate(models, start=1):
+            current = " ✅ (current)" if m.get("id") == self._model_id else ""
+            label = m.get("label") or m.get("model") or m.get("id")
+            lines.append(f"{i}. {label}{current}")
+        # 0 is always Cancel; mark the default brain too when nothing is overridden.
+        default_mark = " ✅ (current)" if self._model_id is None else ""
+        lines.append(f"\n0. Cancel{default_mark}")
+        self._pending_models = models
+        self._channel.send("\n".join(lines))
+
+    def _handle_model_selection(self, text: str) -> None:
+        """Validate the number the user replied with. Re-prompt on bad input;
+        0 cancels; a valid number switches the model and starts a fresh chat."""
+        models = self._pending_models or []
+        choice = text.strip()
+        if choice.lower() in ("cancel", "stop", "abort"):
+            choice = "0"
+        if not choice.lstrip("-").isdigit():
+            self._channel.send(
+                f"That isn't a number. Reply with 1–{len(models)} to choose, or 0 to cancel.")
+            return  # keep the picker open — prompt again
+        n = int(choice)
+        if n == 0:
+            self._pending_models = None
+            self._channel.send("Okay — keeping the current model.")
+            return
+        if not 1 <= n <= len(models):
+            self._channel.send(
+                f"{n} isn't on the list. Reply with a number from 1 to {len(models)}, or 0 to cancel.")
+            return  # invalid → prompt again
+        chosen = models[n - 1]
+        self._pending_models = None
+        self._model_id = chosen.get("id")
+        self._session_id = None  # switching the brain starts a fresh conversation
+        label = chosen.get("label") or chosen.get("model") or chosen.get("id")
+        self._channel.send(f"✅ Switched to {label}. Started a fresh conversation.")
+
     # -- turns -------------------------------------------------------------
 
     def _run_turn(self, text: str) -> None:
         """Plain turn → plain reply (used by /commands; no typing/quote effect)."""
         try:
-            reply, self._session_id = self._on_message(text, self._session_id, self._mode, self.askpass)
+            reply, self._session_id = self._on_message(
+                text, self._session_id, self._mode, self.askpass, self._model_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[telegram] turn failed: %s", exc)
             reply = "Sorry — something went wrong handling that."
@@ -337,7 +401,7 @@ class TelegramInbound:
         status = _TypingStatus(self._channel).start() if reply_to else None
         try:
             reply, self._session_id = self._on_message(
-                text, self._session_id, self._mode, self.askpass)
+                text, self._session_id, self._mode, self.askpass, self._model_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[telegram] turn failed: %s", exc)
             reply = "Sorry — something went wrong handling that."

@@ -11,4 +11,47 @@ conversation:
 voice:
   enabled: true
 provider:
+  model: ''
+  base_url: ''
+  type: opencode
+  api_key_env: OPENAI_API_KEY
+models:
+- id: big-pickle
+  label: Big Pickle
+  provider: Opencode
+  model: big-pickle
+  type: ''
+  base_url: ''
+  api_key_env: ''
+- id: llama-3.1-8b-instant
+  label: LLama 3.1 8b
+  provider: Groq
+  model: llama-3.1-8b-instant
+  type: ''
+  base_url: ''
+  api_key_env: ''
+- id: deepseek-v4-flash-free
+  label: Deepseek V4 Flash
+  provider: Opencode
+  model: deepseek-v4-flash-free
+  type: ''
+  base_url: ''
+  api_key_env: ''
+- id: nemotron-3-ultra-free
+  label: Nemotron 3 Ultra
+  provider: Opencode
   model: nemotron-3-ultra-free
+  type: ''
+  base_url: ''
+  api_key_env: ''
+providers:
+- id: Opencode
+  label: Opencode
+  type: opencode
+  base_url: https://opencode.ai/zen/v1
+  api_key_env: OPENCODE_API_KEY
+- id: Groq
+  label: Groq
+  type: openai_compat
+  base_url: https://api.groq.com/openai/v1
+  api_key_env: GROQ_API_KEY

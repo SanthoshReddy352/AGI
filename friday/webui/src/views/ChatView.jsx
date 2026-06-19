@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
-import { clearMemory, learningModuleSession } from "../api.js";
+import { clearMemory, learningModuleSession, switchLearningModel } from "../api.js";
 import Logo from "../components/Logo.jsx";
 import Message from "../components/Message.jsx";
 import QuizCard from "../components/QuizCard.jsx";
@@ -22,8 +22,43 @@ export default function ChatView() {
     connected, messages, timeline, status, mode, setMode, config, assistantName,
     voiceOn, setVoiceOn, send, stop, newChat, refreshSessions, showLocal,
     chatContext, suggestion, sendToSession, openChat,
+    configuredModels, currentModel, selectModel, switchModelNewSession, chatHasTurns, confirmAction,
+    currentSessionId,
   } = useOutletContext();
   const navigate = useNavigate();
+
+  // Change the chat's brain. Before the first message it's a silent re-pick; once
+  // the chat is underway, switching starts a NEW session (the new model can't see
+  // the old context) — we confirm first, in the same chat thread.
+  async function onPickModel(modelId) {
+    if (modelId === currentModel) return;
+    const label = configuredModels.find((m) => m.id === modelId)?.label || modelId || "the default model";
+    if (chatHasTurns) {
+      const ok = await confirmAction(
+        `Switch to ${label}? This starts a new session in this chat — the new model won't see the earlier messages.`,
+        "Switch model");
+      if (!ok) return;
+      switchModelNewSession(modelId);
+    } else {
+      selectModel(modelId);
+    }
+  }
+
+  // Switching the model inside a Learning-Room thread does NOT cold-start: the
+  // server recaps the current session and seeds the recap into a fresh session on
+  // the new model, so the lesson continues. We confirm first, then open it.
+  async function onPickModelLearning(modelId) {
+    if (modelId === currentModel) return;
+    const label = configuredModels.find((m) => m.id === modelId)?.label || modelId || "the default model";
+    const sid = currentSessionId?.();
+    if (!sid) { selectModel(modelId); return; }  // thread not started yet — just re-pick
+    const ok = await confirmAction(
+      `Switch this lesson to ${label}? I'll summarize what we've covered so far and continue from there — you won't lose your progress.`,
+      "Switch model");
+    if (!ok) return;
+    const r = await switchLearningModel(sid, modelId);
+    if (r?.session_id) openChat(r.session_id);
+  }
 
   const scrollRef = useRef(null);
   const stickRef = useRef(true); // only auto-scroll when the user is at the bottom
@@ -78,16 +113,26 @@ export default function ChatView() {
               { label: chatContext.title || "New Chat" },   // active leaf, not clickable
             ]} />
           ) : chatContext?.topic ? (
-            <Breadcrumb navigate={navigate} crumbs={[
-              { label: "Learning Room", to: "/learning" },
-              { label: chatContext.topic.title, to: `/learning/${chatContext.topic.id}` },
-              // Leaf: the module thread, or "Path chat" for the overview thread —
-              // either way the back arrow lands on the topic dashboard.
-              { label: chatContext.topic.module || "Path chat" },
-            ]} />
+            <>
+              <Breadcrumb navigate={navigate} crumbs={[
+                { label: "Learning Room", to: "/learning" },
+                { label: chatContext.topic.title, to: `/learning/${chatContext.topic.id}` },
+                // Leaf: the module thread, or "Path chat" for the overview thread —
+                // either way the back arrow lands on the topic dashboard.
+                { label: chatContext.topic.module || "Path chat" },
+              ]} />
+              {configuredModels.length > 0 && (
+                <>
+                  <span className="mx-1 shrink-0">·</span>
+                  <ModelSwitcher models={configuredModels} current={currentModel}
+                                 defaultModel={config?.model || "default"} onPick={onPickModelLearning} />
+                </>
+              )}
+            </>
           ) : (
             <>
-              {config?.model || "cloud agent"}
+              <ModelSwitcher models={configuredModels} current={currentModel}
+                             defaultModel={config?.model || "cloud agent"} onPick={onPickModel} />
               <span className="mx-1">·</span>
               <span className="capitalize">{mode} mode</span>
             </>
@@ -136,6 +181,15 @@ export default function ChatView() {
                 if (m.role === "module_done") {
                   return <ModuleDoneCard key={m.id} info={m.info} navigate={navigate}
                                          openChat={openChat} />;
+                }
+                if (m.role === "divider") {
+                  return (
+                    <div key={m.id} className="flex items-center gap-3 py-1 text-[11.5px] text-ink-faint dark:text-night-faint">
+                      <span className="flex-1 h-px bg-line dark:bg-night-line" />
+                      <span className="shrink-0">↻ {m.content}</span>
+                      <span className="flex-1 h-px bg-line dark:bg-night-line" />
+                    </div>
+                  );
                 }
                 return <Message key={m.id} {...m} />;
               })}
@@ -194,6 +248,25 @@ function ModuleDoneCard({ info, navigate, openChat }) {
         )}
       </div>
     </div>
+  );
+}
+
+// The in-chat brain picker. Lists the configured model profiles (Settings →
+// Models) plus a "Default" entry (the provider in config). Picking a different
+// model mid-chat starts a new session — handled by the caller (onPick). When no
+// models are configured it links to where you add them.
+function ModelSwitcher({ models = [], current = "", defaultModel, onPick }) {
+  if (!models.length) {
+    return <span title="Add models in Settings → Models">{defaultModel} · <span className="opacity-70">add models in Settings</span></span>;
+  }
+  return (
+    <select value={current} onChange={(e) => onPick(e.target.value)} title="Switch the model for this chat"
+            className="rounded-md px-1.5 py-0.5 outline-none cursor-pointer max-w-[220px] truncate
+                       bg-paper-soft dark:bg-night-soft text-ink dark:text-night-ink
+                       border border-line dark:border-night-line hover:border-brand focus:border-brand
+                       [&>option]:bg-paper [&>option]:dark:bg-night-panel [&>option]:text-ink [&>option]:dark:text-night-ink">
+      {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+    </select>
   );
 }
 

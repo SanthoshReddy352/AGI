@@ -181,7 +181,32 @@ def test_pedagogy_mandates_quiz_cards_and_confidence_gate(db, topic):
     assert "own chat" in block                                   # no mixed-module chats
     assert "under-taught" in block                               # visuals per concept
     assert "dangling promise" in block                           # no turn ends on "Check:"
-    assert "NEVER write an image/diagram markdown link" in block  # no fabricated URLs
+    assert "NEVER write an image markdown link" in block         # no fabricated URLs
+
+
+def test_repoint_learning_session_module(db, topic):
+    """Switching a module's model re-points its thread to a fresh session (which the
+    recap is seeded into) without disturbing the rest of the plan."""
+    old = _module_sid(db, topic, "m2")
+    new = db.create_session_in(kind="learning")
+    db.set_session_model(new, "gemini-guider")
+    result = db.repoint_learning_session(old, new)
+    assert result is not None
+    # The module now resolves to the new session, and only that module moved.
+    t = db.get_learning_topic(topic["id"])
+    m2 = next(m for m in t["plan"] if m["id"] == "m2")
+    assert m2["session_id"] == new
+    assert db.get_topic_by_session(new)["id"] == topic["id"]
+    assert db.get_topic_by_session(old) is None
+    assert db.get_session(new)["model"] == "gemini-guider"
+
+
+def test_repoint_learning_session_path_chat(db, topic):
+    """The path/overview thread re-points via the topic's session_id column."""
+    old = topic["session_id"]
+    new = db.create_session_in(kind="learning")
+    db.repoint_learning_session(old, new)
+    assert db.get_learning_topic(topic["id"])["session_id"] == new
 
 
 def test_mark_module_complete_resolves_module_from_session(db, topic):

@@ -22,8 +22,19 @@ export const saveSettings = (config, env) =>
 export const clearMemory = (scope) =>
   j("/api/memory/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope }) });
 export const fetchProviders = () => j("/api/providers");
-export const fetchModels = (type, baseUrl = "") =>
-  j(`/api/models?type=${encodeURIComponent(type)}&base_url=${encodeURIComponent(baseUrl)}`);
+export const fetchEnvStatus = (keys) => j(`/api/env_status?keys=${encodeURIComponent((keys || []).join(","))}`);
+export const fetchConfiguredModels = () => j("/api/configured_models");
+export const saveConfiguredModels = (models) =>
+  j("/api/configured_models", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ models }) });
+export const fetchModels = (type, baseUrl = "", apiKey = "") =>
+  j(`/api/models?type=${encodeURIComponent(type)}&base_url=${encodeURIComponent(baseUrl)}` +
+    (apiKey ? `&api_key=${encodeURIComponent(apiKey)}` : ""));
+// List a configured provider's models — server resolves its base_url + key.
+export const fetchModelsForProvider = (providerId) =>
+  j(`/api/models?provider_id=${encodeURIComponent(providerId)}`);
+export const fetchConfiguredProviders = () => j("/api/configured_providers");
+export const saveConfiguredProviders = (providers) =>
+  j("/api/configured_providers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ providers }) });
 export const listSessions = () => j("/api/sessions");
 export const loadSession = (id) => j(`/api/sessions/${id}`);
 export const deleteSession = (id) => j(`/api/sessions/${id}`, { method: "DELETE" });
@@ -54,6 +65,10 @@ export const deleteLearning = (id) => j(`/api/learning/${id}`, { method: "DELETE
 export const updateLearningPlan = (id, modules) => jpatch(`/api/learning/${id}/plan`, { modules });
 export const learningModuleSession = (id, moduleId) => jpost(`/api/learning/${id}/module/${moduleId}/session`);
 export const learningPathSession = (id) => jpost(`/api/learning/${id}/session`);
+// Switch a learning thread to another configured model: the server recaps the
+// current session and returns a fresh session id (seeded with that recap) to open.
+export const switchLearningModel = (sessionId, model) =>
+  jpost("/api/learning/switch_model", { session_id: sessionId, model });
 export const recordLearningQuiz = (id, body) => jpost(`/api/learning/${id}/quiz`, body);
 export const deleteTeachingPreference = (id, index) =>
   j(`/api/learning/${id}/preferences/${index}`, { method: "DELETE" });
@@ -79,6 +94,24 @@ export async function uploadFile(file) {
   const form = new FormData();
   form.append("file", file);
   return j("/api/upload", { method: "POST", body: form });
+}
+
+// ── Skill & Tool packs (export / import) ─────────────────────────────────────
+export const fetchPackItems = () => j("/api/pack/items");
+export const exportPack = (skills, tools) => jpost("/api/pack/export", { skills, tools });
+export const packDownloadUrl = (filename) => `/api/pack/download/${encodeURIComponent(filename)}`;
+export async function inspectPack(file) {
+  const form = new FormData();
+  form.append("file", file);
+  return j("/api/pack/inspect", { method: "POST", body: form });
+}
+export async function installPack(file, { approvedTools = [], skills = null, overwrite = false } = {}) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("approved_tools", (approvedTools || []).join(","));
+  if (skills !== null) form.append("skills", (skills || []).join(","));
+  form.append("overwrite", overwrite ? "true" : "false");
+  return j("/api/pack/install", { method: "POST", body: form });
 }
 
 let _id = 0;
@@ -134,6 +167,9 @@ export function useFriday() {
   const [shuttingDown, setShuttingDown] = useState(false);
   const [learningSignal, setLearningSignal] = useState(null); // {topic_id, at} — dashboard refresh
   const [voiceOn, setVoiceOn] = useState(false); // browser TTS auto-speak
+  const [configuredModels, setConfiguredModels] = useState([]); // switchable brains
+  const configuredModelsRef = useRef([]);
+  configuredModelsRef.current = configuredModels;
   const voiceRef = useRef(voiceOn);
   voiceRef.current = voiceOn;
   const dataRef = useRef({});                     // synchronous mirror of `data`
@@ -336,10 +372,14 @@ export function useFriday() {
     if (!key) { key = "ref" + nextId(); clientRef = key; setCurrentSid(key); }
     else if (isProvisional(key)) { clientRef = key; }
     else { sessionId = key; }
+    // The chat's chosen brain. Falls back to the first configured model so a new
+    // chat runs on a real model instead of the (possibly empty) config default.
+    // Sticky: the server binds it on the first turn and ignores it on later turns.
+    const model = dataRef.current[key]?.model || configuredModelsRef.current[0]?.id || null;
     const userMsg = { id: nextId(), role: "user", content: clean || "(sent attachment)", attachments, at: now() };
     patch(key, (cur) => ({ messages: [...cur.messages, userMsg], timeline: [], streamId: null, status: "thinking", suggestion: null }));
     wsRef.current.send(JSON.stringify({
-      type: "user_input", text: payloadText, session_id: sessionId, client_ref: clientRef, mode: modeRef.current,
+      type: "user_input", text: payloadText, session_id: sessionId, client_ref: clientRef, mode: modeRef.current, model,
     }));
   }, [patch]);
 
@@ -393,7 +433,7 @@ export function useFriday() {
               at: t.created_at ? Date.parse(t.created_at) : undefined }
           : { id: nextId(), role: t.role === "user" ? "user" : "assistant", content: t.content,
               at: t.created_at ? Date.parse(t.created_at) : undefined })),
-      timeline: [], status: "idle", streamId: null,
+      timeline: [], status: "idle", streamId: null, model: r.model || "",
       context: { project: r.project || null, topic: r.topic || null, title: r.title || "" },
     }));
   }, [patch]);
@@ -415,6 +455,40 @@ export function useFriday() {
     refreshSessions();
   }, [refreshSessions]);
 
+  // ── Model selection / switching ───────────────────────────────────────────
+  const reloadConfiguredModels = useCallback(
+    () => fetchConfiguredModels().then((r) => { setConfiguredModels(r?.models || []); return r?.models || []; }),
+    []);
+  useEffect(() => { reloadConfiguredModels(); }, [reloadConfiguredModels]);
+
+  // Pick the brain for a chat that hasn't bound a model yet (empty / not-yet-sent).
+  // No new session needed — the first turn binds it server-side.
+  const selectModel = useCallback((modelId) => {
+    let key = currentRef.current;
+    if (!key) { key = "ref" + nextId(); setCurrentSid(key); }
+    patch(key, () => ({ model: modelId }));
+  }, [patch]);
+
+  // Switch the brain MID-CHAT: starts a NEW session (fresh context) but keeps the
+  // same on-screen thread — the prior messages stay visible above a divider, and
+  // subsequent turns run on the new model in the new session. Caller confirms first.
+  const switchModelNewSession = useCallback((modelId) => {
+    const key = currentRef.current;
+    const st = dataRef.current[key];
+    if (!st) { selectModel(modelId); return; }
+    const label = configuredModels.find((m) => m.id === modelId)?.label || modelId;
+    const divider = { id: nextId(), role: "divider", content: `Switched to ${label} · new session`, at: now() };
+    const newKey = "ref" + nextId();
+    setData((all) => {
+      const o = { ...all };
+      o[newKey] = { ...EMPTY, messages: [...(st.messages || []), divider], model: modelId,
+                    context: st.context || null };
+      dataRef.current = o; return o;
+    });
+    setCurrentSid(newKey);
+    localStorage.removeItem(LAST_SESSION_KEY); // the new session has no id until its first turn
+  }, [configuredModels, selectModel, patch]);
+
   // Show a local (client-only) assistant message — used by /help and /clear.
   const showLocal = useCallback((content) => {
     let key = currentRef.current;
@@ -428,6 +502,8 @@ export function useFriday() {
     chatContext: cur.context || null, suggestion: cur.suggestion || null, learningSignal,
     approval, passwordReq, mode, setMode, sessions, shuttingDown,
     voiceOn, setVoiceOn,
+    configuredModels, currentModel: cur.model || configuredModels[0]?.id || "", selectModel, switchModelNewSession, reloadConfiguredModels,
+    chatHasTurns: (cur.messages || []).some((m) => m.role === "user"),
     send, sendToSession, stop, respondApproval, respondPassword, openSession, newChat, refreshSessions, removeSession, showLocal,
     currentSessionId: () => (currentRef.current && !isProvisional(currentRef.current) ? currentRef.current : null),
   };

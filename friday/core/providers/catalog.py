@@ -53,19 +53,46 @@ def provider_catalog() -> list[dict]:
     return out
 
 
+# A real browser-ish User-Agent. Some provider gateways (notably opencode.ai,
+# which sits behind a WAF) answer the default ``Python-urllib/3.x`` UA with a 403,
+# which silently collapsed the live list down to the curated fallback. Sending a
+# normal UA is the difference between 2 models and the provider's full catalogue.
+_USER_AGENT = "FRIDAY/2.0 (+model-picker; like curl)"
+
+
 def _get_json(url: str, headers: dict, timeout: int = 8) -> dict:
-    req = urllib.request.Request(url, headers=headers)
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
         return json.load(resp)
 
 
-def list_models(ptype: str, base_url: str = "", api_key: str = "", timeout: int = 8) -> list[str]:
-    """Best-effort live model list for a provider type. Returns [] on failure."""
+def _explain(exc: Exception) -> str:
+    """Turn a raw urllib error into something a user can act on."""
+    import urllib.error
+    if isinstance(exc, urllib.error.HTTPError):
+        if exc.code in (401, 403):
+            return f"Provider rejected the request ({exc.code}) — check the API key."
+        if exc.code == 404:
+            return "Provider has no /models endpoint at that Base URL — check the URL."
+        return f"Provider returned HTTP {exc.code}."
+    if isinstance(exc, urllib.error.URLError):
+        return "Couldn't reach the provider — check the Base URL / your connection."
+    return str(exc)[:160]
+
+
+def list_models_result(ptype: str, base_url: str = "", api_key: str = "",
+                       timeout: int = 8) -> dict:
+    """Live model list for a provider, with provenance so the UI can explain a
+    short list. Returns ``{models, source, error}`` where ``source`` is ``"live"``
+    (fetched from the provider) or ``"fallback"`` (curated default — the live fetch
+    found nothing or failed) and ``error`` is a human string when the fetch failed.
+    """
     ptype = (ptype or "").lower()
     spec = _BY_TYPE.get(ptype, {})
     key = api_key or (os.environ.get(spec.get("key_env", "")) if spec.get("key_env") else "") or ""
     base = base_url or spec.get("base_url", "")
     models: list[str] = []
+    error = ""
     try:
         if ptype == "anthropic":
             data = _get_json("https://api.anthropic.com/v1/models",
@@ -81,11 +108,23 @@ def list_models(ptype: str, base_url: str = "", api_key: str = "", timeout: int 
             models = [m["name"].split("/")[-1] for m in data.get("models", [])
                       if "generateContent" in (m.get("supportedGenerationMethods") or [])]
         else:  # openai-compatible family (opencode / lmstudio / ollama / custom)
-            if base:
+            if not base:
+                error = "Set a Base URL for this OpenAI-compatible provider first."
+            else:
                 headers = {"Authorization": f"Bearer {key}"} if key else {}
                 data = _get_json(base.rstrip("/") + "/models", headers, timeout)
                 models = [m.get("id") for m in data.get("data", []) if m.get("id")]
     except Exception as exc:  # noqa: BLE001
+        error = _explain(exc)
         logger.debug("[catalog] model fetch for %s failed: %s", ptype, exc)
     models = sorted(set(filter(None, models)))
-    return models or _FALLBACK_MODELS.get(ptype, [])
+    if models:
+        return {"models": models, "source": "live", "error": ""}
+    if not error and spec.get("needs_key") and not key:
+        error = f"No API key — set {spec.get('key_env')} to list this provider's models."
+    return {"models": _FALLBACK_MODELS.get(ptype, []), "source": "fallback", "error": error}
+
+
+def list_models(ptype: str, base_url: str = "", api_key: str = "", timeout: int = 8) -> list[str]:
+    """Best-effort live model list (names only). Never empty for known providers."""
+    return list_models_result(ptype, base_url, api_key, timeout)["models"]

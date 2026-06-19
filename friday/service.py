@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from friday.config import assistant_name, load_config
+from friday.config import (
+    assistant_name, configured_models, configured_providers, load_config,
+)
 from friday.core.agent import Agent, AgentResult
 from friday.core.builtins import (
     register_agent_tools,
@@ -63,6 +65,12 @@ class FridayService:
             # Wave 5: connect configured MCP servers and register their tools.
             self.mcp = self._build_mcp(self.config, self.registry)
         self.provider = provider or from_config(self.config)
+        # Named provider connections (the "Providers" tab) + switchable model
+        # profiles (the "Models" tab). A turn can run on any model profile, whose
+        # provider ref resolves to one of these connections; built lazily + cached.
+        self._providers = {p["id"]: p for p in configured_providers(self.config)}
+        self._model_profiles = {m["id"]: m for m in configured_models(self.config)}
+        self._model_providers: dict = {}
         self.persona = load_persona(
             self.config.get("persona", "friday_core"),
             display_name=assistant_name(self.config),
@@ -114,11 +122,13 @@ class FridayService:
         # replies); set comms.inbound_enabled false to disable the polling thread.
         if (self.comms is not None and comms_cfg.get("inbound_enabled", True)
                 and self.comms.telegram.available):
-            def _tg_turn(text, session_id, mode, askpass=None):
-                res = self.run_turn(text, session_id=session_id, mode=mode, askpass=askpass)
+            def _tg_turn(text, session_id, mode, askpass=None, model=None):
+                res = self.run_turn(text, session_id=session_id, mode=mode,
+                                    askpass=askpass, model_id=model)
                 return res.content, res.session_id
 
-            self.comms.start_inbound(_tg_turn, name=self.persona.name)
+            self.comms.start_inbound(_tg_turn, name=self.persona.name,
+                                     get_models=self.configured_models)
 
         # Wave 5: the reminder runner is a background polling thread, so it is
         # OPT-IN too (config scheduler.run_in_background, default off). When off,
@@ -353,7 +363,7 @@ class FridayService:
                 f"User: {user[:600]}\n\nAssistant: {assistant[:600]}\n\nTitle:"},
         ]
         try:
-            resp = self.provider.generate(messages, tools=None, stream=False)
+            resp = self.provider_for(None).generate(messages, tools=None, stream=False)
         except Exception as exc:  # noqa: BLE001
             from friday.core.logger import logger
             logger.warning("[service] auto-title failed: %s", exc)
@@ -363,6 +373,40 @@ class FridayService:
         if title and self.db.set_auto_title(session_id, title):
             return title
         return None
+
+    def learning_recap(self, session_id: str, topic: Optional[dict] = None,
+                       module: Optional[dict] = None) -> str:
+        """A concise hand-off recap of a Learning-Room thread, so a DIFFERENT model
+        can seamlessly continue teaching after a mid-topic model switch. Best-effort:
+        returns "" when there's nothing taught yet or the summary call fails."""
+        turns = self.db.session_turns(session_id)
+        convo = [t for t in turns
+                 if t.get("role") in ("user", "assistant") and (t.get("content") or "").strip()]
+        if len(convo) < 2:  # only the seeded intro — nothing to recap yet
+            return ""
+        transcript = "\n".join(
+            f"{t['role'].upper()}: {(t['content'] or '')[:800]}" for t in convo[-16:])
+        mtitle = (module or {}).get("title") or (topic or {}).get("title") or "this topic"
+        messages = [
+            {"role": "system", "content":
+                "You summarize a one-on-one tutoring session so another teacher can "
+                "seamlessly pick it up. Be concise and concrete."},
+            {"role": "user", "content":
+                f'This is a lesson on "{mtitle}". Summarize for the next teacher in 3–5 '
+                "short bullet points:\n"
+                "- what the learner has already covered and seems to understand\n"
+                "- any running example or analogy in use\n"
+                "- where they struggled (if anywhere)\n"
+                "- the very next thing to teach\n"
+                "Output only the bullet points.\n\n" + transcript},
+        ]
+        try:
+            resp = self.provider_for(None).generate(messages, tools=None, stream=False)
+        except Exception as exc:  # noqa: BLE001
+            from friday.core.logger import logger
+            logger.warning("[service] learning recap failed: %s", exc)
+            return ""
+        return (resp.content or "").strip()
 
     def summarize_project_sessions(self, project_id: str, limit: int = 3) -> int:
         """Summarize a project's finished-but-unsummarized chats so the next
@@ -488,7 +532,7 @@ class FridayService:
         info, last_err = None, ""
         for _ in range(2):
             try:
-                resp = self.provider.generate(prompt, tools=None, stream=False)
+                resp = self.provider_for(None).generate(prompt, tools=None, stream=False)
             except Exception as exc:  # noqa: BLE001
                 last_err = f"analysis failed: {exc}"
                 continue
@@ -544,6 +588,95 @@ class FridayService:
 
     # -- turn driving ------------------------------------------------------
 
+    # -- providers + model profiles (switchable brains) --------------------
+
+    def configured_providers(self) -> list[dict]:
+        """The named provider connections (id/label/type/base_url/api_key_env)."""
+        return list(self._providers.values())
+
+    def configured_models(self) -> list[dict]:
+        """The curated, switchable model profiles (id/label/provider/model/…)."""
+        return list(self._model_profiles.values())
+
+    def reload_providers(self, providers_list: list[dict]) -> list[dict]:
+        """Refresh the named provider connections after the Providers tab saves;
+        drop cached per-profile providers so model brains rebuild with the new
+        type/base_url/key. No restart needed."""
+        self.config["providers"] = providers_list or []
+        self._providers = {p["id"]: p for p in configured_providers(self.config)}
+        self._model_providers = {}
+        return self.configured_providers()
+
+    def reload_models(self, models_list: list[dict]) -> list[dict]:
+        """Refresh the profile set after the Models tab saves; drop cached
+        providers so edited base_urls/keys take effect without a restart."""
+        self.config["models"] = models_list or []
+        self._model_profiles = {m["id"]: m for m in configured_models(self.config)}
+        self._model_providers = {}
+        return self.configured_models()
+
+    def apply_config(self, config: Optional[dict] = None) -> dict:
+        """Make provider / model / API-key edits take effect WITHOUT a restart.
+
+        Rebuilds the default provider (so a changed brain, base_url or key is used
+        on the very next turn) and refreshes the switchable model profiles, dropping
+        cached per-profile providers so they pick up new keys/URLs too. Pass the
+        merged config from ``update_config``; falls back to the in-memory config
+        (used when only an API key changed). A bad provider spec is logged and the
+        previous provider is kept, so a half-typed setting never bricks the chat."""
+        if config is not None:
+            self.config = config
+        try:
+            new_provider = from_config(self.config)
+            self.provider = new_provider
+            if getattr(self, "agent", None) is not None:
+                self.agent.provider = new_provider
+        except Exception as exc:  # noqa: BLE001
+            from friday.core.logger import logger
+            logger.warning("[settings] provider rebuild failed; keeping previous: %s", exc)
+        self._providers = {p["id"]: p for p in configured_providers(self.config)}
+        self._model_profiles = {m["id"]: m for m in configured_models(self.config)}
+        self._model_providers = {}
+        return self.config
+
+    def provider_for(self, model_id: Optional[str]):
+        """The Provider for a model profile id. With no/unknown id, prefer the
+        user's FIRST configured model (their real setup) over the legacy config
+        `provider:` chain — so a chat default turn AND internal features
+        (auto-title, summaries) all run on a working brain, not a stale fallback.
+        Providers are built once and cached per profile."""
+        if not model_id or model_id not in self._model_profiles:
+            if self._model_profiles:
+                model_id = next(iter(self._model_profiles))
+            else:
+                return self.provider  # nothing configured → legacy default chain
+        cached = self._model_providers.get(model_id)
+        if cached is not None:
+            return cached
+        prov = self._build_profile_provider(self._model_profiles[model_id])
+        self._model_providers[model_id] = prov
+        return prov
+
+    def _build_profile_provider(self, prof: dict):
+        """Build a single Provider for a model profile. The connection (type /
+        base_url / api_key_env) comes from the profile's named provider ref, or —
+        for older self-contained rows — its own inline fields. Tuning
+        (max_tokens/temperature/timeout) is inherited from the default provider."""
+        from friday.core.providers.registry import build_provider
+        base = dict(self.config.get("provider") or {})
+        conn = self._providers.get(prof.get("provider") or "", {})
+        spec = {
+            "type": prof.get("type") or conn.get("type") or base.get("type"),
+            "model": prof.get("model"),
+            "base_url": prof.get("base_url") or conn.get("base_url") or "",
+            "api_key_env": (prof.get("api_key_env") or conn.get("api_key_env")
+                            or base.get("api_key_env")),
+            "max_tokens": base.get("max_tokens", 8192),
+            "temperature": base.get("temperature", 0.3),
+            "timeout_s": base.get("timeout_s", 60),
+        }
+        return build_provider(spec)
+
     def run_turn(
         self,
         text: str,
@@ -554,8 +687,11 @@ class FridayService:
         mode: str = "agent",
         should_cancel: Optional[Callable[[], bool]] = None,
         askpass: Optional[Callable[[str], Optional[str]]] = None,
+        model_id: Optional[str] = None,
     ) -> AgentResult:
-        """Run one turn. Events fan out to narration, final-answer speech, and the sink."""
+        """Run one turn. Events fan out to narration, final-answer speech, and the
+        sink. ``model_id`` picks one of the configured model profiles (the chat's
+        chosen brain); falls back to the default provider when unset/unknown."""
         from friday.core.interactive import (
             get_current_session, set_artifact_recorder, set_askpass, set_event_sink,
         )
@@ -586,6 +722,7 @@ class FridayService:
             return self.agent.process_turn(
                 text, session_id=session_id, on_token=on_token, approval=approval,
                 mode=mode, should_cancel=should_cancel, emit=emit,
+                provider=self.provider_for(model_id),
             )
         finally:
             set_askpass(None)

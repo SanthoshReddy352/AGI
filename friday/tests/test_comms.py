@@ -57,7 +57,7 @@ def test_inbound_routes_text_to_callback():
     ch.send = lambda text: sent.append(text) or True  # capture replies synchronously
     seen = []
 
-    def on_msg(text, session_id, mode, askpass=None):
+    def on_msg(text, session_id, mode, askpass=None, model=None):
         seen.append((text, mode))
         return f"echo: {text}", "sess-1"
 
@@ -71,7 +71,7 @@ def test_inbound_shell_command():
     ch = TelegramChannel(token="t", chat_id="42")
     ch.send = lambda text: True
     seen = []
-    inbound = TelegramInbound(ch, lambda t, s, m, a=None: (seen.append(t) or "ok", s))
+    inbound = TelegramInbound(ch, lambda t, s, m, a=None, model=None: (seen.append(t) or "ok", s))
     inbound._process("!df -h")
     assert seen and "df -h" in seen[0] and "run_shell" in seen[0]
 
@@ -80,15 +80,62 @@ def test_inbound_mode_command():
     ch = TelegramChannel(token="t", chat_id="42")
     sent = []
     ch.send = lambda text: sent.append(text) or True
-    inbound = TelegramInbound(ch, lambda t, s, m, a=None: ("x", s))
+    inbound = TelegramInbound(ch, lambda t, s, m, a=None, model=None: ("x", s))
     assert inbound._handle_command("/mode chat") is True
     assert inbound._mode == "chat"
+
+
+def test_inbound_model_picker_flow():
+    ch = TelegramChannel(token="t", chat_id="42")
+    sent = []
+    ch.send = lambda text: sent.append(text) or True
+    models = [{"id": "opus", "label": "Claude Opus"}, {"id": "gpt", "label": "GPT-5.5"}]
+    used = []
+    inbound = TelegramInbound(
+        ch, lambda t, s, m, a=None, model=None: (used.append(model) or "ok", "sess-1"),
+        get_models=lambda: models)
+
+    # /model lists the models numbered, with a Cancel option, and opens the picker.
+    assert inbound._handle_command("/model") is True
+    menu = sent[-1]
+    assert "1. Claude Opus" in menu and "2. GPT-5.5" in menu and "0. Cancel" in menu
+    assert inbound._pending_models == models
+
+    # A bad choice re-prompts and keeps the picker open.
+    inbound._dispatch({"message": {"chat": {"id": 42}, "text": "9"}})
+    assert inbound._pending_models == models and "isn't on the list" in sent[-1]
+
+    # A non-number also re-prompts.
+    inbound._dispatch({"message": {"chat": {"id": 42}, "text": "blah"}})
+    assert inbound._pending_models == models and "isn't a number" in sent[-1]
+
+    # A valid choice switches the model and starts a fresh session.
+    inbound._dispatch({"message": {"chat": {"id": 42}, "text": "2"}})
+    assert inbound._pending_models is None
+    assert inbound._model_id == "gpt" and inbound._session_id is None
+    assert "Switched to GPT-5.5" in sent[-1]
+
+    # The chosen model is now passed on every turn.
+    inbound._process("hello")
+    assert used[-1] == "gpt"
+
+
+def test_inbound_model_cancel():
+    ch = TelegramChannel(token="t", chat_id="42")
+    sent = []
+    ch.send = lambda text: sent.append(text) or True
+    inbound = TelegramInbound(ch, lambda t, s, m, a=None, model=None: ("ok", s),
+                              get_models=lambda: [{"id": "x", "label": "X"}])
+    inbound._handle_command("/model")
+    inbound._dispatch({"message": {"chat": {"id": 42}, "text": "0"}})
+    assert inbound._pending_models is None and inbound._model_id is None
+    assert "keeping the current model" in sent[-1].lower()
 
 
 def test_inbound_ignores_wrong_chat():
     ch = TelegramChannel(token="t", chat_id="42")
     calls = []
-    inbound = TelegramInbound(ch, lambda t, s, m, a=None: (calls.append(t) or "x", s))
+    inbound = TelegramInbound(ch, lambda t, s, m, a=None, model=None: (calls.append(t) or "x", s))
     inbound._dispatch({"message": {"chat": {"id": 999}, "text": "hi"}})
     assert calls == []
 
@@ -98,7 +145,7 @@ def test_inbound_askpass_captures_password():
     sent, deleted = [], []
     ch.send = lambda text: sent.append(text) or True
     ch._post = lambda method, body: deleted.append((method, body)) or {"ok": True}
-    inbound = TelegramInbound(ch, lambda t, s, m, a=None: ("ok", s))
+    inbound = TelegramInbound(ch, lambda t, s, m, a=None, model=None: ("ok", s))
 
     import threading
     result = {}
@@ -162,7 +209,7 @@ def _recording_channel():
 
 def test_inbound_registers_command_menu():
     ch, calls = _recording_channel()
-    inbound = TelegramInbound(ch, lambda t, s, m, a=None: ("x", s))
+    inbound = TelegramInbound(ch, lambda t, s, m, a=None, model=None: ("x", s))
     inbound._register_commands()
     setcmds = [b for meth, b in calls if meth == "setMyCommands"]
     assert setcmds and any(c["command"] == "help" for c in setcmds[0]["commands"])
@@ -170,7 +217,7 @@ def test_inbound_registers_command_menu():
 
 def test_inbound_reply_quotes_user_message():
     ch, calls = _recording_channel()
-    inbound = TelegramInbound(ch, lambda t, s, m, a=None: ("the answer", "sess"))
+    inbound = TelegramInbound(ch, lambda t, s, m, a=None, model=None: ("the answer", "sess"))
     inbound._reply_turn("hi", reply_to=5)
     # The answer is sent ONCE as a reply quoting the user's message — no edits/placeholder.
     sends = [b for meth, b in calls if meth == "sendMessage"]
@@ -182,7 +229,7 @@ def test_inbound_reply_quotes_user_message():
 def test_inbound_voice_transcribes_and_answers(monkeypatch):
     ch, calls = _recording_channel()
     seen = []
-    inbound = TelegramInbound(ch, lambda t, s, m, a=None: (seen.append(t) or "ok", s))
+    inbound = TelegramInbound(ch, lambda t, s, m, a=None, model=None: (seen.append(t) or "ok", s))
     monkeypatch.setattr(inbound, "_download", lambda v: "/tmp/voice.oga")
     monkeypatch.setattr("friday.comms.transcribe.transcribe_audio", lambda p: "what's the time")
     inbound._process_voice({"file_id": "v1"}, "", reply_to=7)
@@ -193,7 +240,7 @@ def test_inbound_voice_without_stt_replies_gracefully(monkeypatch):
     ch, calls = _recording_channel()
     sent = []
     ch.send = lambda text, reply_to=None: sent.append(text) or True
-    inbound = TelegramInbound(ch, lambda t, s, m, a=None: ("x", s))
+    inbound = TelegramInbound(ch, lambda t, s, m, a=None, model=None: ("x", s))
     monkeypatch.setattr(inbound, "_download", lambda v: "/tmp/voice.oga")
     monkeypatch.setattr("friday.comms.transcribe.transcribe_audio", lambda p: None)
     inbound._process_voice({"file_id": "v1"}, "", reply_to=7)

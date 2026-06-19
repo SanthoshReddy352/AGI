@@ -135,6 +135,7 @@ function Shell() {
       {showSettings && (
         <Settings onClose={() => setShowSettings(false)} theme={theme}
                   onThemeToggle={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+                  onModelsChanged={() => friday.reloadConfiguredModels?.()}
                   onMemoryCleared={() => { friday.refreshSessions(); newChat(); }} />
       )}
     </div>

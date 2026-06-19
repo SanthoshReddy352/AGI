@@ -97,11 +97,15 @@ class Agent:
         mode: str = "agent",
         should_cancel: Optional[Callable[[], bool]] = None,
         emit: Optional[EmitFn] = None,
+        provider: Optional[Provider] = None,
     ) -> AgentResult:
         # Per-turn event sink. Concurrent turns each pass their own ``emit`` so
         # structured events never cross-talk between sessions; fall back to the
         # instance-level emitter for callers that don't (Telegram, tests).
         emit = emit or self._emit
+        # The brain for THIS turn: a per-chat model override (model switching)
+        # falls back to the agent's default provider.
+        provider = provider or self.provider
         if not session_id:
             session_id = self.new_session()
 
@@ -150,7 +154,7 @@ class Agent:
                 break
             step += 1
             stream = on_token is not None
-            resp = self.provider.generate(messages, tools=tool_defs, stream=stream, on_token=on_token)
+            resp = provider.generate(messages, tools=tool_defs, stream=stream, on_token=on_token)
             usage = resp.usage or usage
 
             if not resp.has_tool_calls:
@@ -211,8 +215,16 @@ class Agent:
                 # renders in place the moment it exists instead of popping in at
                 # the end of the turn.
                 data = getattr(result, "data", None) or {}
-                if result.ok and isinstance(data, dict) and data.get("url") and not _have(data["url"]):
-                    media_md = result.as_message_content().strip()
+                media_md = ""
+                if result.ok and isinstance(data, dict):
+                    if data.get("url") and not _have(data["url"]):
+                        media_md = result.as_message_content().strip()
+                    # A diagram that couldn't be rendered to an image degrades to an
+                    # inline text outline — surface it the same way so the visual
+                    # still appears in the answer and the turn never stalls on it.
+                    elif data.get("inline") and not _have(data["inline"]):
+                        media_md = data["inline"].strip()
+                if media_md:
                     segments.append(media_md)
                     if on_token is not None:
                         on_token(media_md + "\n\n")

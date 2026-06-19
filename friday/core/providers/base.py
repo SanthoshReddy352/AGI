@@ -80,7 +80,7 @@ class Provider(ABC):
         api_key: Optional[str] = None,
         api_key_env: Optional[str] = None,
         base_url: Optional[str] = None,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
         temperature: float = 0.3,
         timeout_s: float = 60.0,
         max_retries: int = 3,

@@ -15,7 +15,9 @@ provider:
   type: opencode                 # anthropic | openai | google | openai_compat | opencode | lmstudio | ollama
   model: big-pickle
   api_key_env: OPENAI_API_KEY  # secrets live in .env, never here
-  max_tokens: 4096
+  max_tokens: 8192             # per-RESPONSE output cap (not the context window).
+                               # 4096 truncated long answers mid-sentence and could
+                               # cut a turn before its closing tool call (e.g. a quiz).
   temperature: 0.3
   timeout_s: 60
   base_url: https://opencode.ai/zen/v1
@@ -41,6 +43,31 @@ provider:
     #   model: your-model
       base_url: https://opencode.ai/zen/v1
     #   api_key_env: FRIDAY_API_KEY
+
+# ── Providers + Models (switchable brains) ─────────────────────────
+# Configure each PROVIDER once — with its OWN API key variable — then list the
+# MODELS you want to switch between (each names a provider + a model id). Manage
+# both from the UI: Settings → Providers, then Settings → Models (writes
+# config.local.yaml, applies live). Models show in the picker at the top of every
+# chat; switching mid-conversation starts a new session in the same chat.
+# providers:
+#   - id: opencode
+#     label: Opencode
+#     type: opencode
+#     base_url: https://opencode.ai/zen/v1
+#     api_key_env: OPENCODE_API_KEY      # each provider keeps a DISTINCT key var
+#   - id: groq
+#     label: Groq
+#     type: openai_compat
+#     base_url: https://api.groq.com/openai/v1
+#     api_key_env: GROQ_API_KEY
+# models:
+#   - label: Claude Opus
+#     provider: opencode                 # → providers[].id
+#     model: claude-opus-4-8
+#   - label: Llama 3.3 (Groq)
+#     provider: groq
+#     model: llama-3.3-70b
 
 # ── Persona ────────────────────────────────────────────────────────
 persona: friday_core              # loaded from personas/<id>.yaml

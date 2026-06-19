@@ -105,6 +105,64 @@ def assistant_name(config: Optional[dict] = None) -> str:
     return name or "FRIDAY"
 
 
+def configured_providers(config: Optional[dict] = None) -> list[dict]:
+    """The user's named provider connections (``providers:`` in config).
+
+    Each is a reusable connection — type + base_url + its OWN api_key_env — so
+    several providers (Opencode, Groq, OpenAI, …) coexist, each with a distinct
+    API key. Models reference one of these by ``id``. Normalised with a stable id.
+    """
+    cfg = config if config is not None else load_config()
+    out: list[dict] = []
+    seen: set[str] = set()
+    for i, p in enumerate(cfg.get("providers") or []):
+        if not isinstance(p, dict):
+            continue
+        pid = str(p.get("id") or p.get("label") or p.get("type") or f"provider-{i}").strip()
+        if not pid or pid in seen:
+            pid = f"{pid or 'provider'}-{i}"
+        seen.add(pid)
+        out.append({
+            "id": pid,
+            "label": (p.get("label") or pid).strip(),
+            "type": (p.get("type") or "").strip(),
+            "base_url": (p.get("base_url") or "").strip(),
+            "api_key_env": (p.get("api_key_env") or "").strip(),
+        })
+    return out
+
+
+def configured_models(config: Optional[dict] = None) -> list[dict]:
+    """The user's curated list of switchable model profiles (``models:`` in config).
+
+    Each profile names a ``provider`` (one of :func:`configured_providers`) plus a
+    ``model`` id, so models from different providers can be swapped per-chat. Older
+    self-contained rows (inline type/base_url/api_key_env, no ``provider`` ref) are
+    still honoured. Normalised to a stable shape with a guaranteed ``id``.
+    """
+    cfg = config if config is not None else load_config()
+    out: list[dict] = []
+    seen: set[str] = set()
+    for i, m in enumerate(cfg.get("models") or []):
+        if not isinstance(m, dict):
+            continue
+        mid = str(m.get("id") or m.get("model") or f"model-{i}").strip()
+        if not mid or mid in seen:
+            mid = f"{mid or 'model'}-{i}"
+        seen.add(mid)
+        out.append({
+            "id": mid,
+            "label": (m.get("label") or m.get("model") or mid).strip(),
+            "provider": (m.get("provider") or "").strip(),   # → configured_providers id
+            "model": (m.get("model") or "").strip(),
+            # Back-compat: inline connection used when no provider ref is given.
+            "type": (m.get("type") or "").strip(),
+            "base_url": (m.get("base_url") or "").strip(),
+            "api_key_env": (m.get("api_key_env") or "").strip(),
+        })
+    return out
+
+
 def set_env_values(updates: dict, path: Optional[str] = None) -> list[str]:
     """Create/update ``KEY=value`` lines in ``.env`` (preserving other lines).
     Also applies to the live ``os.environ``. Returns the keys written."""

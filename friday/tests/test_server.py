@@ -253,3 +253,44 @@ def test_auto_title_skips_learning_threads():
     sid = svc.db.create_session_in(kind="learning")
     svc.db.add_turn(sid, "user", "teach me")
     assert svc.auto_title(sid) is None
+
+
+def test_learning_switch_model_recaps_and_repoints():
+    """Switching a learning thread's model recaps the session, binds the new model
+    to a fresh session, re-points the module onto it, and seeds the recap intro —
+    instead of cold-starting."""
+    svc = _service([LLMResponse(content="- Covered what a neuron is\n- Next: activation functions")])
+    app = create_app(svc)
+    client = TestClient(app)
+    topic = svc.db.create_learning_topic("Neural networks", "solid")
+    svc.db.set_learning_plan(topic["id"], [{"id": "m1", "title": "Neurons", "summary": "the unit"}])
+    old = svc.db.module_session(topic["id"], "m1")
+    svc.db.add_turn(old, "assistant", "Welcome — today we learn neurons.")
+    svc.db.add_turn(old, "user", "what's a neuron?")
+    svc.db.add_turn(old, "assistant", "A neuron sums weighted inputs and fires.")
+
+    r = client.post("/api/learning/switch_model",
+                    json={"session_id": old, "model": "gemini-guider"}).json()
+    assert r["ok"] is True
+    new = r["session_id"]
+    assert new and new != old
+    # new session bound to the chosen model
+    assert svc.db.get_session(new)["model"] == "gemini-guider"
+    # module re-pointed onto the new session; old session detached from the topic
+    plan = svc.db.get_learning_topic(topic["id"])["plan"]
+    assert next(m for m in plan if m["id"] == "m1")["session_id"] == new
+    assert svc.db.get_topic_by_session(old) is None
+    # the new thread opens with a recap intro carrying the summary
+    intro = svc.db.session_turns(new)[0]["content"]
+    assert "now learning with" in intro and "activation functions" in intro
+    assert "activation functions" in r["recap"]
+
+
+def test_learning_switch_model_rejects_non_learning_session():
+    svc = _service([])  # provider must not be called
+    app = create_app(svc)
+    client = TestClient(app)
+    sid = svc.db.create_session()  # a plain chat, not a learning thread
+    r = client.post("/api/learning/switch_model",
+                    json={"session_id": sid, "model": "x"}).json()
+    assert r["ok"] is False

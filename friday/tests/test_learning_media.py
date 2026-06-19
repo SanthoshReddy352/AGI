@@ -68,13 +68,49 @@ def test_fetch_image_mocked(reg, tmp_path, monkeypatch):
 @pytest.mark.skipif(not (shutil.which("mmdc") or (Path.home() / ".npm-global/bin/mmdc").exists()),
                     reason="mermaid-cli (mmdc) not installed")
 def test_render_diagram_real(reg, tmp_path):
-    res = reg.execute("render_diagram", {"mermaid": "graph TD; A-->B; B-->C", "title": "Flow"})
+    # Labels with the characters that used to crash the parser (quotes, parens,
+    # commas) must now render cleanly — the model supplies data, we build the syntax.
+    res = reg.execute("render_diagram", {
+        "type": "flowchart", "title": "Flow",
+        "links": [
+            {"from": "Abstraction", "to": 'Focus on "what", not "how"', "label": "means"},
+            {"from": "Abstraction", "to": "Hide details (e.g. car pedals)"},
+        ]})
     assert res.ok, res.error
     rel = res.data["url"].split("/api/media/")[1]
     out = tmp_path / "media" / rel
     assert out.exists() and out.stat().st_size > 0
 
 
-def test_render_diagram_requires_code(reg):
-    res = reg.execute("render_diagram", {"mermaid": ""})
-    assert not res.ok
+@pytest.mark.skipif(not (shutil.which("mmdc") or (Path.home() / ".npm-global/bin/mmdc").exists()),
+                    reason="mermaid-cli (mmdc) not installed")
+def test_render_diagram_sequence(reg):
+    res = reg.execute("render_diagram", {
+        "type": "sequence", "title": "Chat",
+        "steps": [
+            {"from": "Learner", "to": "Teacher", "text": "Why; how?"},
+            {"from": "Teacher", "to": "Learner", "text": 'It hides "how".'},
+        ]})
+    assert res.ok, res.error
+    assert res.data.get("url") and res.data["kind"] == "diagram"
+
+
+def test_render_diagram_requires_data(reg):
+    # No links / steps → a clear error (not a crash). type is required.
+    res = reg.execute("render_diagram", {"type": "flowchart", "title": "x"})
+    assert not res.ok and "links" in res.error
+    res = reg.execute("render_diagram", {"type": "bogus", "title": "x"})
+    assert not res.ok and "type" in res.error
+
+
+def test_render_diagram_falls_back_when_render_unavailable(reg, monkeypatch):
+    # When mmdc is missing, the tool MUST still succeed with a text outline so a
+    # lesson (and any follow-up quiz) is never derailed by a missing picture.
+    import friday.tools.learning_media as lm
+    monkeypatch.setattr(lm, "_mmdc", lambda: None)
+    res = reg.execute("render_diagram", {
+        "type": "tree", "title": "Breakdown",
+        "links": [{"from": "Animal", "to": "Dog"}, {"from": "Animal", "to": "Cat"}]})
+    assert res.ok
+    assert res.data.get("fallback") and res.data.get("inline")
+    assert "Animal" in res.content and "Dog" in res.content
