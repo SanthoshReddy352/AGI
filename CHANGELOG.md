@@ -3,7 +3,13 @@
 All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [2.2.1] — Renamed to Namma Agent
+## [2.2.2] — Namma Agent Build/Release
+
+### Changed
+- **Fixed GitHub CI & Release Workflows for Namma Agent**  
+- **Fixed Bundling Issues**  
+
+## [2.2.1] — Namma Agent GitHub Workflow
 
 ### Changed
 - **Fixed GitHub CI & Release Workflows for Namma Agent**  
