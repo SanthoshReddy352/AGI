@@ -46,6 +46,15 @@ def run(cmd, cwd=None):
     subprocess.run([str(c) for c in cmd], cwd=cwd and str(cwd), check=True)
 
 
+def run_npm(args, cwd):
+    # npm is npm.cmd on Windows — a batch file subprocess can't launch directly,
+    # so go through cmd.exe there. On POSIX call npm normally.
+    if os.name == "nt":
+        run(["cmd", "/c", "npm", *args], cwd=cwd)
+    else:
+        run(["npm", *args], cwd=cwd)
+
+
 def stage_app():
     """Stage a clean app copy (tracked files + the prebuilt UI) at build/app."""
     if BUILD.exists():
@@ -53,16 +62,30 @@ def stage_app():
     APP.mkdir(parents=True)
     webui = ROOT / "namma_agent" / "webui"
     if not (webui / "dist" / "index.html").exists():
-        run(["npm", "install"], cwd=webui)
-        run(["npm", "run", "build"], cwd=webui)
+        run_npm(["install"], cwd=webui)
+        run_npm(["run", "build"], cwd=webui)
     tar = BUILD / "src.tar"
     run(["git", "archive", "-o", tar, "HEAD"], cwd=ROOT)
     with tarfile.open(tar) as t:
-        t.extractall(APP)
+        t.extractall(APP, filter="data")   # filter= silences the py3.14 tar warning
     tar.unlink()
     dst = APP / "namma_agent" / "webui" / "dist"
     dst.mkdir(parents=True, exist_ok=True)
     shutil.copytree(webui / "dist", dst, dirs_exist_ok=True)
+
+
+def _icon():
+    """A natively-valid PyInstaller icon for THIS OS, or None. Windows uses .ico;
+    macOS needs .icns for the .app (skip if absent — avoids a Pillow dependency for
+    png->icns conversion); Linux ignores executable icons."""
+    assets = ROOT / "namma_agent" / "assets"
+    if os.name == "nt":
+        p = assets / "sparkle.ico"
+        return p if p.exists() else None
+    if platform.system() == "Darwin":
+        p = assets / "sparkle.icns"
+        return p if p.exists() else None
+    return None
 
 
 def freeze(ver: str):
@@ -76,8 +99,8 @@ def freeze(ver: str):
             "--distpath", DIST, "--workpath", BUILD / "pyi", "--specpath", BUILD]
     if onefile:
         args.append("--onefile")
-    ico = ROOT / "namma_agent" / "assets" / ("sparkle.ico" if os.name == "nt" else "sparkle.png")
-    if ico.exists():
+    ico = _icon()
+    if ico:
         args += ["--icon", ico]
     args.append(ROOT / "installer" / "__main__.py")
     run(args, cwd=ROOT)

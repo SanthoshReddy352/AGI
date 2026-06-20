@@ -167,14 +167,20 @@ def install_requirements(install_dir: Path, log: Log) -> None:
                     str(install_dir / "namma_agent" / "requirements.txt")], check=True)
 
 
+def _npm(args: list[str], cwd: str) -> None:
+    # npm is npm.cmd on Windows — launch via cmd.exe so subprocess can find it.
+    cmd = (["cmd", "/c", "npm", *args] if os.name == "nt" else ["npm", *args])
+    subprocess.run(cmd, cwd=cwd, check=False)
+
+
 def build_ui(install_dir: Path, log: Log) -> None:
     if (install_dir / "namma_agent" / "webui" / "dist" / "index.html").exists():
         return
     if _has("npm"):
         log("  Building the web UI …")
         webui = str(install_dir / "namma_agent" / "webui")
-        subprocess.run(["npm", "install"], cwd=webui, check=False)
-        subprocess.run(["npm", "run", "build"], cwd=webui, check=False)
+        _npm(["install"], webui)
+        _npm(["run", "build"], webui)
 
 
 def _run_app_cli(install_dir: Path, args: list[str]) -> None:
