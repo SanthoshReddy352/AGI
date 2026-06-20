@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.0] — Renamed to Namma Agent
+
+### Changed
+- **Project renamed to Namma Agent** — *Intelligence for Everyone. Your Trusted
+  AI Companion. Your Agent, Your Advantage.* A full rename, not just docs:
+  - **Package:** the `friday/` package is now `namma_agent/`; run it with
+    `python -m namma_agent`. All imports (`from namma_agent…`), the
+    `NammaAgentService` class, the `useNammaAgent` web hook, and the `about_namma`
+    / `exit_namma` tools were renamed accordingly.
+  - **Environment variables:** `FRIDAY_*` → `NAMMA_*` (`NAMMA_API_KEY`,
+    `NAMMA_TELEGRAM_TOKEN`, `NAMMA_CONFIG`, `NAMMA_LOG_LEVEL`, …). `ASSISTANT_NAME`
+    is unchanged. **Existing `.env` files must migrate their keys.**
+  - **Data paths:** `data/friday.db` → `data/namma_agent.db`, `logs/friday.log` →
+    `logs/namma_agent.log`, `~/.friday/` → `~/.namma_agent/` (skills, tools,
+    personas, browser profile). **Existing databases/profiles must be moved or are
+    recreated fresh.**
+  - **Default assistant name:** the configurable display name now defaults to
+    *Namma Agent* (was *FRIDAY*); set `assistant.name` / `ASSISTANT_NAME` to call
+    the assistant anything you like — the mechanism is unchanged.
+  - **Docs:** the README and `docs/` set were rewritten under the new name, and
+    [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) was redesigned to document the
+    current codebase — Projects (FTS5/BM25 RAG + injection screening), the Learning
+    Room (scoped teacher agent, conversational assessment, confidence gate),
+    deterministic memory auto-capture, shareable packs, and document conversion —
+    with ten new architectural-decision entries.
+
 ## [2.1.0] — Project knowledge bases + Learning Room v2
 
 ### Added
@@ -27,7 +53,7 @@ based on [Keep a Changelog](https://keepachangelog.com/).
   on a pannable, zoomable infinite canvas (status colors, minimap, click to
   open a module).
 - **Syllabus → path** — upload a school/college syllabus (PDF/DOCX/…) in the
-  "New topic" modal; FRIDAY screens it (injection or non-syllabus content is
+  "New topic" modal; Namma Agent screens it (injection or non-syllabus content is
   flagged, nothing is built), verifies it is a syllabus, infers the learner's
   level automatically, and builds the module path from it.
 - **Learning Telegram nudges** — module-completion progress pings
@@ -98,8 +124,9 @@ based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [2.0.0] — Cloud-only rebuild
 
-FRIDAY was rebuilt from the ground up as a **cloud-only** assistant. The entire
-application now lives in the `friday/` package; the legacy local-model /
+Namma Agent (then named FRIDAY) was rebuilt from the ground up as a **cloud-only**
+assistant. The entire
+application now lives in the `namma_agent/` package; the legacy local-model /
 intent-recognizer / PyQt stack was removed.
 
 ### Added
@@ -120,7 +147,7 @@ intent-recognizer / PyQt stack was removed.
 - **Web UI** — React + Tailwind chat with a live tool/progress timeline, mode
   switch (chat/agent), stop button, attachments, and a settings panel.
 - **Messaging bridges** — Telegram (inbound + outbound) and Discord; MCP client.
-- **Configurable assistant name** — `assistant.name` in `friday/config.yaml`
+- **Configurable assistant name** — `assistant.name` in `namma_agent/config.yaml`
   (or the `ASSISTANT_NAME` env var) renames the assistant everywhere from one place.
 
 ### Removed

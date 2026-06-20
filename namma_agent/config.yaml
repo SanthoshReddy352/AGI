@@ -1,0 +1,195 @@
+# Namma Agent — Cloud-Only configuration
+# The brain is an API call: native Anthropic/Google/OpenAI, or any
+# OpenAI-compatible endpoint (opencode / LM Studio / Ollama / custom).
+
+# ── Assistant identity ─────────────────────────────────────────────
+# THE one place to rename the assistant. Set `name` to anything you like
+# (e.g. "Jarvis", "Aria", "Max") and it changes everywhere — the system
+# prompt, the web UI, the voice, and the messaging bridges. You can also
+# override it without editing this file via the ASSISTANT_NAME env var.
+assistant:
+  name: Heaven
+
+# ── Provider (the brain) ───────────────────────────────────────────
+provider:
+  type: opencode                 # anthropic | openai | google | openai_compat | opencode | lmstudio | ollama
+  model: big-pickle
+  api_key_env: OPENAI_API_KEY  # secrets live in .env, never here
+  max_tokens: 8192             # per-RESPONSE output cap (not the context window).
+                               # 4096 truncated long answers mid-sentence and could
+                               # cut a turn before its closing tool call (e.g. a quiz).
+  temperature: 0.3
+  timeout_s: 60
+  base_url: https://opencode.ai/zen/v1
+
+  # Ordered fallbacks tried when the primary is unavailable/errors.
+  fallback:
+    - type: opencode
+      model: deepseek-v4-flash-free
+      api_key_env: OPENAI_API_KEY
+    # - type: ollama              # local server via OpenAI-compat (no key)
+    #   model: llama3.1
+    # - type: openai_compat       # any custom endpoint
+    #   model: your-model
+      base_url: https://opencode.ai/zen/v1
+    #   api_key_env: NAMMA_API_KEY
+
+    - type: opencode
+      model: nemotron-3-ultra-free
+      api_key_env: OPENAI_API_KEY
+    # - type: ollama              # local server via OpenAI-compat (no key)
+    #   model: llama3.1
+    # - type: openai_compat       # any custom endpoint
+    #   model: your-model
+      base_url: https://opencode.ai/zen/v1
+    #   api_key_env: NAMMA_API_KEY
+
+# ── Providers + Models (switchable brains) ─────────────────────────
+# Configure each PROVIDER once — with its OWN API key variable — then list the
+# MODELS you want to switch between (each names a provider + a model id). Manage
+# both from the UI: Settings → Providers, then Settings → Models (writes
+# config.local.yaml, applies live). Models show in the picker at the top of every
+# chat; switching mid-conversation starts a new session in the same chat.
+# providers:
+#   - id: opencode
+#     label: Opencode
+#     type: opencode
+#     base_url: https://opencode.ai/zen/v1
+#     api_key_env: OPENCODE_API_KEY      # each provider keeps a DISTINCT key var
+#   - id: groq
+#     label: Groq
+#     type: openai_compat
+#     base_url: https://api.groq.com/openai/v1
+#     api_key_env: GROQ_API_KEY
+# models:
+#   - label: Claude Opus
+#     provider: opencode                 # → providers[].id
+#     model: claude-opus-4-8
+#   - label: Llama 3.3 (Groq)
+#     provider: groq
+#     model: llama-3.3-70b
+
+# ── Persona ────────────────────────────────────────────────────────
+persona: core              # loaded from personas/<id>.yaml
+
+# ── Skills (procedural memory / learning loop, ported from hermes) ──
+skills:
+  user_dir: ~/.namma_agent/skills      # where create_skill writes learned skills
+  allow_inline_shell: false       # expand !`cmd` snippets inside SKILL.md (off by default)
+
+# ── Memory (curated notes + cross-session recall, ported from hermes) ─
+memory:
+  notes_dir: data/memory          # USER.md + MEMORY.md the agent curates
+
+# ── Browser (controlled, visible browser for real video playback + control) ──
+browser:
+  engine: playwright              # 'playwright' (controllable, visible) or 'webbrowser' (default browser, no control)
+  headless: false                 # false = visible window you can watch (recommended)
+  preferred: auto                 # which browser to drive: auto (detect OS default) | chrome | chromium | brave | edge | vivaldi | opera | firefox
+  fullscreen: true                # open videos in fullscreen
+  # Profile = where logins are cached so your accounts stay signed in. With
+  # use_system_profile true, Namma Agent copies your real profile's logins (cookies +
+  # Default profile, minus caches) into a dedicated dir it can drive safely.
+  use_system_profile: true        # reuse your REAL browser logins (copied once into profile_dir-<browser>)
+  profile_dir: ~/.namma_agent/browser-profile   # base dir for the driveable profile copy
+
+# ── Background services (opt-in: "everything visible" by default) ───
+scheduler:
+  run_in_background: false        # auto-fire due reminders from a polling thread
+
+# ── Learning Room ───
+learning:
+  notify_progress: true           # Telegram/Discord ping when a module completes (needs comms)
+  nudge_after_days: 3             # "it's been a while" nudge for idle topics (0 disables;
+                                  # the nudge thread rides scheduler.run_in_background)
+comms:
+  inbound_enabled: true           # reply to Telegram messages (needs NAMMA_TELEGRAM_TOKEN + CHAT_ID; polling thread)
+  # Transcribe Telegram voice messages (optional — local STT was removed; the web
+  # UI uses the browser, but Telegram needs a transcription endpoint). Put the key
+  # in .env under api_key_env. Works with OpenAI or any OpenAI-compatible STT
+  # endpoint (set base_url, e.g. Groq). Leave the key unset to disable voice.
+  stt:
+    api_key_env: OPENAI_API_KEY
+    # base_url:                   # e.g. https://api.groq.com/openai/v1
+    model: whisper-1
+
+# ── Conversation / narration ───────────────────────────────────────
+conversation:
+  # Spoken progress is narrated by the model; these are the delays (seconds)
+  # after which a context-aware "still working" line is spoken on long tasks.
+  progress_delays_s: [4.0, 12.0, 25.0]
+  max_history_turns: 12
+  tool_loop_limit: 0              # 0 = UNLIMITED tool steps (use the Stop button to halt); >0 = hard cap
+  memory_nudge_every: 6            # remind the model to curate memory every N exchanges (0=off)
+  default_mode: agent             # 'agent' (all tools/skills) or 'chat' (pure conversation)
+  auto_approve: false             # Auto mode: run destructive tools (shell etc.) without asking permission
+
+# ── Voice ──────────────────────────────────────────────────────────
+# Voice is 100% browser-native (Web Speech API): the UI reads answers aloud and
+# the mic dictates input. The backend produces no audio and has no STT — there is
+# nothing to configure or install here.
+
+# ── Database ───────────────────────────────────────────────────────
+database:
+  path: data/namma_agent.db
+
+# ── Security tools (active scanning — OFF by default) ──────────────
+# Enable only on networks you are authorized to test. Targets must fall
+# inside authorized_scopes (loopback is always allowed). All scans are
+# approval-gated through the tool registry.
+security:
+  lab_mode: false                 # set true to expose port_scan/ping_sweep/dir_enum/dns_enum
+  authorized_scopes: []           # e.g. ["192.168.1.0/24", "10.0.0.0/8", "lab.example.com"]
+  # ── Filesystem access policy ──
+  # Namma Agent can READ files anywhere on the machine (your docs live all over the
+  # disk). WRITES / deletes / renames are blocked inside the OS + installed-
+  # software trees (C:\Windows, Program Files, ProgramData on Windows; /usr,
+  # /etc, /bin, /lib, /opt, /System… on Linux/macOS) so it can read those files
+  # but can't corrupt the OS or your programs. Secret files (ssh/gpg/aws keys,
+  # /etc/shadow) stay blocked for reads too. Tune it here:
+  filesystem:
+    # extra_protected_write_paths: ["D:\\Games", "/mnt/backups"]  # ALSO read-only
+    # protected_write_paths: [...]   # REPLACE the OS/software read-only roots
+    # writable_anywhere: false       # true = allow writes everywhere except secrets
+  # nmap_binary: nmap
+  # gobuster_binary: gobuster
+  # dig_binary: dig
+  # wordlist: /usr/share/wordlists/dirb/common.txt
+  # default_timeout_sec: 120
+  # dig_timeout_sec: 30
+
+# ── Smart home (Home Assistant — optional) ─────────────────────────
+# Off until url + token are set. The token belongs in .env, named by token_env.
+# smart_home:
+#   url: http://homeassistant.local:8123
+#   token_env: HASS_TOKEN
+#   aliases:
+#     bedroom lights: light.bedroom_main
+#     ac: climate.living_room_ac
+
+# ── Scheduler / tasks / goals (persisted stores) ───────────────────
+# Channel tokens for comms (Telegram/Discord) live in .env, not here.
+# scheduler:
+#   store_path: data/reminders.json
+# tasks:
+#   store_path: data/tasks.json
+# goals:
+#   store_path: data/goals.json
+# scheduler:
+#   poll_seconds: 30          # how often the reminder runner checks for due items
+
+# ── MCP servers (optional — external Model Context Protocol tools) ──
+# Each server's tools appear as mcp_<server>_<tool> in the registry.
+# mcp:
+#   servers:
+#     - name: filesystem
+#       command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/me"]
+#     - name: git
+#       command: ["uvx", "mcp-server-git"]
+#       enabled: true
+
+# ── Logging ────────────────────────────────────────────────────────
+logging:
+  level: info                     # debug | info | warning | error  (env NAMMA_LOG_LEVEL overrides)
+  to_file: true                   # also write logs/namma_agent.log (rotating)
+  file: logs/namma_agent.log

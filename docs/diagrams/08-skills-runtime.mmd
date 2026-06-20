@@ -6,5 +6,5 @@ flowchart LR
     model[model sees a match] --> use[use_skill name]
     use --> render[render: substitute SKILL_DIR/SESSION_ID<br/>+ optional inline-shell]
     render --> follow[full procedure returned → model follows it]
-    novel[solved a novel task] --> create[create_skill → ~/.friday/skills]
+    novel[solved a novel task] --> create[create_skill → ~/.namma_agent/skills]
     create --> store

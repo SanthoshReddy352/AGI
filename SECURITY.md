@@ -14,7 +14,7 @@ We'll acknowledge the report and work with you on a fix and disclosure timeline.
 
 ## Scope & operational notes
 
-FRIDAY is an assistant that can run shell commands, control a browser, send
+Namma Agent is an assistant that can run shell commands, control a browser, send
 messages, and read/write files on the host. Run it as a normal (non-root) user and
 treat it with the same caution as any tool with system access.
 

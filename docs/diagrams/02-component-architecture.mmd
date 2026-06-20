@@ -1,12 +1,12 @@
 flowchart TB
-    subgraph Frontend["Frontend — friday/webui (React + Vite + Tailwind)"]
-        App[App.jsx] --- Hook[useFriday hook<br/>WS client]
+    subgraph Frontend["Frontend — namma_agent/webui (React + Vite + Tailwind)"]
+        App[App.jsx] --- Hook[useNammaAgent hook<br/>WS client]
         App --- Composer & Sidebar & Settings & Message
         Hook -. Web Speech API .- Voice[ReadAloud / mic dictation]
     end
 
-    subgraph Backend["Backend — friday/"]
-        API[server/api.py<br/>FastAPI + /ws] --> SVC[service.py<br/>FridayService]
+    subgraph Backend["Backend — namma_agent/"]
+        API[server/api.py<br/>FastAPI + /ws] --> SVC[service.py<br/>NammaAgentService]
         SVC --> AG[core/agent.py<br/>Agent]
         SVC --> NAR[core/narration.py]
         SVC --> EV[core/events.py<br/>fanout]

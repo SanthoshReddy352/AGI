@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to FRIDAY! Keep PRs focused — one logical change per PR.
+Thanks for contributing to Namma Agent! Keep PRs focused — one logical change per PR.
 For anything large (new provider, agent-loop change, new tool surface), please
 open an issue first so we can agree on the approach.
 -->
@@ -17,12 +17,12 @@ open an issue first so we can agree on the approach.
 <!-- See CONTRIBUTING.md. Tick what applies; explain any N/A. -->
 
 - [ ] New behavior is the only path (old path deleted, not left running alongside).
-- [ ] A test exists that **fails without this change** (`friday/tests/test_<area>.py`).
-- [ ] New tools follow the v2 pattern (a `register(registry)` in `friday/tools/`,
+- [ ] A test exists that **fails without this change** (`namma_agent/tests/test_<area>.py`).
+- [ ] New tools follow the v2 pattern (a `register(registry)` in `namma_agent/tools/`,
       JSON-Schema params, approval-gated if destructive, graceful when a binary is missing).
 - [ ] No hard-coded assistant name — resolved via `assistant_name()` / `config.assistant_name`.
 - [ ] Cross-platform branches are guarded and verified (or N/A noted below).
-- [ ] `python -m pytest friday/tests/ -q` is green locally.
+- [ ] `python -m pytest namma_agent/tests/ -q` is green locally.
 
 ## Platforms verified
 

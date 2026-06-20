@@ -1,29 +1,29 @@
 name: Feature request
-description: Propose a new capability or behavior — describe it by the words you'd speak.
+description: Propose a new capability or behavior — a tool, a skill, or a UI improvement.
 title: "[feat]: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        FRIDAY is **phrasing-first**: a feature is defined by what the user
-        says and what FRIDAY should do in response. Lead with that — the
-        implementation can follow.
+        Namma Agent acts through **tools the model calls natively** and
+        **skills** (Markdown playbooks over existing tools). Lead with what you
+        want to do and what the assistant should do back — the implementation
+        can follow. See [EXTENDING.md](../../blob/main/docs/EXTENDING.md).
   - type: textarea
     id: phrasing
     attributes:
-      label: What you'd say
-      description: The natural phrasings you'd speak or type to trigger this.
+      label: What you'd ask for
+      description: The natural request you'd type or speak to trigger this.
       placeholder: |
-        "Hey Friday, dim the screen to reading brightness"
-        "set brightness to night mode"
+        "Summarize the PDFs in this project and quiz me on them"
     validations:
       required: true
   - type: textarea
     id: behavior
     attributes:
-      label: What FRIDAY should do
-      placeholder: Set brightness to a low preset (~20%) and confirm out loud.
+      label: What the assistant should do
+      placeholder: Read the project documents, produce a summary, then pose quiz cards.
     validations:
       required: true
   - type: textarea
@@ -37,16 +37,15 @@ body:
     id: area
     attributes:
       label: Area
-      description: Which part of FRIDAY does this touch?
+      description: Which part of Namma Agent does this touch?
       options:
-        - Voice I/O
-        - System control
-        - Document intelligence
-        - Vision
-        - Online skills (browser/search/news/weather)
-        - Productivity (reminders/notes/tasks/goals/focus)
-        - Memory / personas
-        - Routing / intent recognition
+        - Agent loop / providers
+        - Tools (files, shell, web, browser, network, etc.)
+        - Projects & document intelligence (RAG)
+        - Learning Room
+        - Memory / personas / skills
+        - Voice & messaging (Telegram/Discord)
+        - Web UI
         - Other / not sure
     validations:
       required: true
@@ -54,7 +53,7 @@ body:
     id: alternatives
     attributes:
       label: Alternatives you've considered
-      description: Other phrasings, existing capabilities that almost do this, etc.
+      description: Other approaches, existing capabilities that almost do this, etc.
   - type: checkboxes
     id: checks
     attributes:
@@ -62,5 +61,5 @@ body:
       options:
         - label: I searched existing issues and this isn't already requested.
           required: true
-        - label: I've read CONTRIBUTING.md — new capabilities need an intent pattern + test.
+        - label: I've read CONTRIBUTING.md — new tools ship as a `register(registry)` module with a test.
           required: false

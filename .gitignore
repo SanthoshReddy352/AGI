@@ -42,7 +42,7 @@ data/media/
 data/memory/
 data/projects/
 data/uploads/
-# P2.2: canonical DB is data/friday.db; core/data/ was the accidental duplicate
+# P2.2: canonical DB is data/namma_agent.db; core/data/ was the accidental duplicate
 core/data/
 models/
 piper/
@@ -77,14 +77,39 @@ responses/
 plan/
 
 # pywebview disk cache (warm-start cache for the native desktop window)
-friday/.webview/
+namma_agent/.webview/
 
 # Ad-hoc scratch notes (not part of the project)
 notes.txt
 notes.md
-friday_notes.md
+namma_agent_notes.md
 full_after.txt
 
 # Loose RAG test PDFs dropped at repo root (real fixtures live under tests/)
 /RAG Testing Dataset_ Aerospace Engineering.pdf
 /RAG Testing File Generation - Google Gemini.pdf
+
+# Runtime state the app rewrites (regenerated on launch — never commit)
+data/*.json
+
+# Secrets backups (e.g. produced during an env-var migration)
+.env.bak
+.env.*.bak
+*.env.bak
+
+# Desktop installer / packaging build output
+installers/build/
+installers/dist/
+installers/native/build/
+installers/native/dist/
+*.AppImage
+*.dmg
+*.spec
+NammaAgent*-Setup-*.exe
+NammaAgentInstaller*.exe
+
+# Loose scratch dropped at repo root (portfolio/blog/render experiments)
+/chunk*.js
+/style*.css
+/*-mmd.py
+/auth_flow_*.png

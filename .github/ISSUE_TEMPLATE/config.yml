@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or discussion
-    url: https://github.com/SanthoshReddy352/Friday_Linux/discussions
+    url: https://github.com/SanthoshReddy352/Namma-Agent/discussions
     about: Ask a usage question or discuss an idea before filing an issue.
   - name: Security vulnerability
-    url: https://github.com/SanthoshReddy352/Friday_Linux/security/advisories/new
+    url: https://github.com/SanthoshReddy352/Namma-Agent/security/advisories/new
     about: Report security issues privately — please do not open a public issue.
   - name: Setup help
-    url: https://github.com/SanthoshReddy352/Friday_Linux/blob/main/SETUP_GUIDE.md
-    about: Installation and model-download walkthrough (Linux + Windows).
+    url: https://github.com/SanthoshReddy352/Namma-Agent/blob/main/README.md
+    about: Installation, provider config, and run instructions (Linux + Windows).

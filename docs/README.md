@@ -1,5 +1,9 @@
-# FRIDAY Documentation
+# Namma Agent Documentation
 
+- **[INSTALL.md](INSTALL.md)** — install, run, and update the Desktop App on
+  Windows/macOS/Linux (one-click installers + how updates work).
+- **[RELEASING.md](RELEASING.md)** — how to publish a new version (versions, git
+  tags, GitHub releases) so installed apps can auto-update. Beginner-friendly.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — how the whole system works, with UML
   diagrams and the rationale behind every major technical decision. Start here.
 - **[SKILLS.md](SKILLS.md)** — how skills (procedural memory) work and how they're created.

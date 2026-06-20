@@ -1,17 +1,17 @@
-# FRIDAY — Project Instructions
+# Namma Agent — Project Instructions
 
-FRIDAY is a **cloud-only** personal AI assistant. The brain is an API call
+Namma Agent is a **cloud-only** personal AI assistant. The brain is an API call
 (native Anthropic / OpenAI / Google, or any OpenAI-compatible endpoint). The
-entire application lives in the [`friday/`](friday/) package — there is no
+entire application lives in the [`namma_agent/`](namma_agent/) package — there is no
 local-model, intent-recognizer, or PyQt stack. (The legacy v1 tree was removed;
 git history holds it if you ever need it.)
 
 ## Architecture
 
 ```
-friday/
+namma_agent/
 ├── config.py / config.yaml      — config loader (+ config.local.yaml overlay) + .env
-├── service.py                   — FridayService: wires provider + tools + memory + agent
+├── service.py                   — NammaAgentService: wires provider + tools + memory + agent
 ├── app.py / __main__.py         — launcher (uvicorn + pywebview window; --server for headless)
 ├── core/
 │   ├── agent.py                 — THE agent loop (generate → tools → loop → final, streaming)
@@ -25,40 +25,40 @@ friday/
 │   ├── narration.py / events.py — spoken progress + event bus
 │   └── browser_controller.py    — Playwright-driven visible browser
 ├── tools/                       — auto-discovered tool modules (one register() per file)
-├── personas/                    — friday_core (built-in default; users add their own to ~/.friday/personas)
+├── personas/                    — core (built-in default; users add their own to ~/.namma_agent/personas)
 ├── comms/  voice/  mcp/  server/  webui/   — bridges, TTS+STT, MCP client, FastAPI, React UI
 └── tests/                       — the test suite (offline/mocked)
 ```
 
-Run: `python -m friday --server` then open http://127.0.0.1:8000.
-Test: `python -m pytest friday/tests/ -q` (no API key needed).
+Run: `python -m namma_agent --server` then open http://127.0.0.1:8000.
+Test: `python -m pytest namma_agent/tests/ -q` (no API key needed).
 
 ## The assistant's name is configurable — never hard-code it
 
-`assistant.name` in `friday/config.yaml` (or the `ASSISTANT_NAME` env var) is the
+`assistant.name` in `namma_agent/config.yaml` (or the `ASSISTANT_NAME` env var) is the
 **single source of truth** for what the assistant is called. Resolve it via
-`friday.config.assistant_name()`. It flows into the system prompt, the web UI, the
+`namma_agent.config.assistant_name()`. It flows into the system prompt, the web UI, the
 about tool, and Telegram.
 
 When you add user-facing text that names the assistant:
 - **Backend / prompts:** use the `{name}` placeholder (the persona renderer
   substitutes `self.name`) or read `assistant_name()` directly.
 - **Web UI:** read it from `config.assistant_name` (already fetched via
-  `/api/config`) and thread it down as a prop — don't write the literal "FRIDAY".
-- **Leave `FRIDAY_*` env-var names alone** (`FRIDAY_API_KEY`, `FRIDAY_TELEGRAM_TOKEN`,
+  `/api/config`) and thread it down as a prop — don't hard-code the assistant's name.
+- **Leave `NAMMA_*` env-var names alone** (`NAMMA_API_KEY`, `NAMMA_TELEGRAM_TOKEN`,
   etc.) — those are stable identifiers, not display text.
 
-The Python package/dir is `friday` and stays that way regardless of the display name.
+The Python package/dir is `namma_agent` and stays that way regardless of the display name.
 
 ## Adding a tool
 
-1. Create `friday/tools/<name>.py` with a `register(registry)` function that calls
+1. Create `namma_agent/tools/<name>.py` with a `register(registry)` function that calls
    `registry.register(name, description, json_schema, handler)`. It's auto-discovered.
 2. Params are **JSON Schema** (no intent regex — the model calls tools natively).
 3. Destructive/sensitive actions: add the tool name to the safety classification so
    it's approval-gated; degrade gracefully when an external binary is missing
    (return a clear "install X" error, don't crash).
-4. Add a focused test under `friday/tests/test_<area>.py`.
+4. Add a focused test under `namma_agent/tests/test_<area>.py`.
 
 ## Platform notes
 

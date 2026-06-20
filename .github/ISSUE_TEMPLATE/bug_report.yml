@@ -1,5 +1,5 @@
 name: Bug report
-description: Something FRIDAY did wrong — a misroute, a crash, a wrong answer.
+description: Something Namma Agent did wrong — a wrong tool call, a crash, or a wrong answer.
 title: "[bug]: "
 labels: ["bug"]
 body:
@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Thanks for filing a bug! The more precisely you describe **what you
-        said** and **what FRIDAY did**, the faster we can reproduce it.
+        said** and **what the assistant did**, the faster we can reproduce it.
 
         > For security vulnerabilities, do **not** open an issue — see
         > [SECURITY.md](../../blob/main/SECURITY.md).
@@ -15,24 +15,24 @@ body:
     id: said
     attributes:
       label: What you said / did
-      description: The exact phrasing you spoke or typed, or the steps you took.
+      description: The exact message you typed (or spoke), or the steps you took.
       placeholder: |
-        "Hey Friday, set brightness to fifty"
+        "Organize my Downloads folder by file type"
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
       label: What you expected
-      placeholder: Brightness changes to 50%.
+      placeholder: Files moved into per-type subfolders, with a summary.
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
       label: What actually happened
-      description: Include FRIDAY's spoken/printed reply if relevant.
-      placeholder: It replied "Brightness set to 60" but nothing changed.
+      description: Include the assistant's reply if relevant.
+      placeholder: It said it organized them, but nothing moved.
     validations:
       required: true
   - type: textarea
@@ -40,9 +40,18 @@ body:
     attributes:
       label: Relevant log excerpt
       description: |
-        Paste the relevant lines from `logs/friday.log`. The `[ROUTE]` line for
-        the affected turn is especially useful for routing bugs.
+        Paste the relevant lines from `logs/namma_agent.log`. Set
+        `logging.level: debug` (or `NAMMA_LOG_LEVEL=debug`) to capture the
+        full tool/turn trace for the affected message.
       render: text
+  - type: input
+    id: provider
+    attributes:
+      label: Provider / model
+      description: Which brain were you using? (e.g. anthropic / claude-opus-4-8, ollama / llama3.1)
+      placeholder: anthropic / claude-opus-4-8
+    validations:
+      required: true
   - type: dropdown
     id: os
     attributes:

@@ -1,6 +1,6 @@
-# FRIDAY — Create Your Own Tools & Skills
+# Namma Agent — Create Your Own Tools & Skills
 
-This is the hands-on guide for **developers** extending FRIDAY by hand. (If you want
+This is the hands-on guide for **developers** extending Namma Agent by hand. (If you want
 the *assistant* to extend itself at runtime, see
 [SELF_MODIFICATION.md](SELF_MODIFICATION.md).)
 
@@ -8,8 +8,8 @@ the *assistant* to extend itself at runtime, see
 
 | You want to… | Build a… | Where |
 |---|---|---|
-| Add a capability that doesn't exist (call an API, run a computation, drive a device) | **Tool** (Python) | `friday/tools/<name>.py` |
-| Capture a repeatable *procedure* over existing tools | **Skill** (Markdown) | `friday/skills/<name>/SKILL.md` |
+| Add a capability that doesn't exist (call an API, run a computation, drive a device) | **Tool** (Python) | `namma_agent/tools/<name>.py` |
+| Capture a repeatable *procedure* over existing tools | **Skill** (Markdown) | `namma_agent/skills/<name>/SKILL.md` |
 
 Rule of thumb: **a skill if existing tools can already do it; a tool only when new code
 is required.**
@@ -18,13 +18,13 @@ is required.**
 
 ## 1. Write a tool
 
-A tool is a Python module in `friday/tools/` that exposes a `register(registry)`
+A tool is a Python module in `namma_agent/tools/` that exposes a `register(registry)`
 function. It's auto-discovered at startup — no list to edit, no intent regex. The
 model routes to it purely from the **name + description + JSON-Schema parameters**.
 
 ### Minimal example
 
-`friday/tools/coin.py`:
+`namma_agent/tools/coin.py`:
 
 ```python
 """Coin flip tool."""
@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import secrets
 
-from friday.core.tools import ToolRegistry, ToolResult
+from namma_agent.core.tools import ToolRegistry, ToolResult
 
 
 def _flip(_args: dict) -> ToolResult:
@@ -118,12 +118,12 @@ Guard OS-specific behavior with `platform.system()` / `os.name`, and pass
 
 ### Test it
 
-Add `friday/tests/test_<area>.py`. Tools are easy to unit-test because they're plain
+Add `namma_agent/tests/test_<area>.py`. Tools are easy to unit-test because they're plain
 functions returning `ToolResult`:
 
 ```python
-from friday.core.tools import ToolRegistry
-from friday.tools.coin import register
+from namma_agent.core.tools import ToolRegistry
+from namma_agent.tools.coin import register
 
 
 def test_flip_coin():
@@ -133,17 +133,17 @@ def test_flip_coin():
     assert result.ok and result.data["side"] in ("heads", "tails")
 ```
 
-Run: `python -m pytest friday/tests/ -q`.
+Run: `python -m pytest namma_agent/tests/ -q`.
 
 ---
 
 ## 2. Write a skill
 
 A skill is a folder with a `SKILL.md` — YAML frontmatter + a markdown procedure that
-orchestrates **existing** tools. No code. Drop it in `friday/skills/` (bundled) or
-`~/.friday/skills/` (your own).
+orchestrates **existing** tools. No code. Drop it in `namma_agent/skills/` (bundled) or
+`~/.namma_agent/skills/` (your own).
 
-`friday/skills/morning-brief/SKILL.md`:
+`namma_agent/skills/morning-brief/SKILL.md`:
 
 ```markdown
 ---
@@ -187,9 +187,9 @@ option.
 
 Everything above can also happen at runtime, driven by the model:
 
-- "Make a skill for my morning briefing" → `create_skill` writes it to `~/.friday/skills/`.
+- "Make a skill for my morning briefing" → `create_skill` writes it to `~/.namma_agent/skills/`.
 - "Make a tool that converts currencies" → `create_tool` writes + hot-loads Python to
-  `~/.friday/tools/` (approval-gated).
+  `~/.namma_agent/tools/` (approval-gated).
 
 See [SELF_MODIFICATION.md](SELF_MODIFICATION.md) for how that works and the safety model.
 
@@ -197,12 +197,12 @@ See [SELF_MODIFICATION.md](SELF_MODIFICATION.md) for how that works and the safe
 
 ## 4. Checklist
 
-- [ ] Tool file in `friday/tools/` with a `register(registry)` function.
+- [ ] Tool file in `namma_agent/tools/` with a `register(registry)` function.
 - [ ] Clear `description` + JSON-Schema `parameters`.
 - [ ] `destructive=True` if it changes the system.
 - [ ] Graceful "install X" message if it needs a missing binary.
 - [ ] Cross-platform guards where relevant.
-- [ ] A test in `friday/tests/`; `python -m pytest friday/tests/ -q` green.
+- [ ] A test in `namma_agent/tests/`; `python -m pytest namma_agent/tests/ -q` green.
 - [ ] (Skill instead?) `SKILL.md` with a trigger-rich `description`.
 
 ## 5. See also

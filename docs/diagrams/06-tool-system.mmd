@@ -1,7 +1,7 @@
 flowchart LR
     subgraph Discovery["load_tools() at startup"]
-        scan[pkgutil scans friday/tools/*.py] --> reg[module.register registry]
-        user[load_user_tools<br/>~/.friday/tools/*.py] --> reg
+        scan[pkgutil scans namma_agent/tools/*.py] --> reg[module.register registry]
+        user[load_user_tools<br/>~/.namma_agent/tools/*.py] --> reg
         mcp[MCPManager registers<br/>mcp_server_tool] --> reg
     end
     reg --> REG[(ToolRegistry)]

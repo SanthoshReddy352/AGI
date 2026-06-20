@@ -1,6 +1,6 @@
-# FRIDAY — Modifying Its Own Code & Capabilities
+# Namma Agent — Modifying Its Own Code & Capabilities
 
-FRIDAY can extend and reconfigure itself at runtime. It can **write a brand-new tool**
+Namma Agent can extend and reconfigure itself at runtime. It can **write a brand-new tool**
 (Python it loads live), **author or refine skills** (procedures), **read its own
 documentation**, and **change its own configuration** (provider, model, settings,
 secrets). This document explains each mechanism, where the new artifacts land, and
@@ -30,7 +30,7 @@ sequenceDiagram
     participant U as User
     participant M as Model
     participant CT as create_tool (approval-gated)
-    participant FS as ~/.friday/tools/
+    participant FS as ~/.namma_agent/tools/
     participant REG as ToolRegistry
     U->>M: "make a tool that does X"
     M->>CT: create_tool(name, description, code="def run(args): ...", parameters)
@@ -51,11 +51,11 @@ What you provide:
 | `code` | Python that defines **`def run(args): ...`** returning a `str`, `dict`, or `ToolResult` |
 | `parameters` | optional JSON Schema for the tool's arguments |
 
-The handler wraps your `run()` in a generated module (`friday/tools/authoring.py:_TEMPLATE`):
+The handler wraps your `run()` in a generated module (`namma_agent/tools/authoring.py:_TEMPLATE`):
 
 ```python
 """User-authored tool: usd_to_inr."""
-from friday.core.tools import ToolResult
+from namma_agent.core.tools import ToolResult
 
 NAME = "usd_to_inr"
 DESCRIPTION = "Convert an amount in USD to INR."
@@ -77,7 +77,7 @@ def register(registry):
     registry.register(NAME, DESCRIPTION, PARAMETERS, _handler)
 ```
 
-- The file is written to **`~/.friday/tools/<name>.py`** and **hot-loaded** into the
+- The file is written to **`~/.namma_agent/tools/<name>.py`** and **hot-loaded** into the
   live registry, so it's usable in the same turn.
 - It's validated minimally: `name`, `description`, and `code` are required, and `code`
   must define `def run(`.
@@ -85,8 +85,8 @@ def register(registry):
 
 ### Persistence across restarts
 
-`~/.friday/tools/` is imported on **every startup** by `load_user_tools()` (called from
-`friday/tools/__init__.py:load_tools`). So a tool the assistant wrote once is part of
+`~/.namma_agent/tools/` is imported on **every startup** by `load_user_tools()` (called from
+`namma_agent/tools/__init__.py:load_tools`). So a tool the assistant wrote once is part of
 its toolset forever — it survives restarts with no extra step. Files starting with `_`
 are skipped; a tool that fails to import is logged and skipped (it can't break boot).
 
@@ -102,10 +102,10 @@ in the catalog. This is the preferred path. Full detail in [SKILLS.md](SKILLS.md
 
 ## 3. Reconfiguring itself (provider, model, settings, secrets)
 
-FRIDAY can change its own configuration without editing files by hand:
+Namma Agent can change its own configuration without editing files by hand:
 
 - **`config.update_config(updates)`** writes a deep-merged overlay to
-  `friday/config.local.yaml`. The documented base `config.yaml` is **never** rewritten;
+  `namma_agent/config.local.yaml`. The documented base `config.yaml` is **never** rewritten;
   the overlay wins at load time. This is how the Settings panel persists changes (e.g.
   switch `provider.type` from `anthropic` to `ollama`, change the model, toggle
   `auto_approve`).
@@ -113,9 +113,9 @@ FRIDAY can change its own configuration without editing files by hand:
   (preserving other lines) and applies them to the live environment — for API keys,
   Telegram tokens, etc.
 - Both are exposed over **`GET`/`POST /api/settings`**, which the UI Settings panel uses.
-- **`about_friday`** (`friday/tools/selfdoc.py`) lets the assistant answer questions about
+- **`about_namma`** (`namma_agent/tools/selfdoc.py`) lets the assistant answer questions about
   *itself* — how to switch provider, what modes exist, how memory/skills/browser/Telegram
-  work — by reading `friday/self_knowledge.md` (with the configured assistant name
+  work — by reading `namma_agent/self_knowledge.md` (with the configured assistant name
   substituted in).
 
 Because provider selection is just config, the assistant can be told "use Claude Opus
@@ -138,7 +138,7 @@ Model-written tool code runs **in-process with the app's privileges**. The contr
 4. **Audit trail** — every tool execution (including authored tools) is logged to the
    `audit` table with args + result.
 5. **Explicit location** — authored artifacts live in a known, inspectable place:
-   `~/.friday/tools/` (code) and `~/.friday/skills/` (procedures). You can read, edit, or
+   `~/.namma_agent/tools/` (code) and `~/.namma_agent/skills/` (procedures). You can read, edit, or
    delete them like any file.
 
 > If you want the assistant to be unable to write code at all, remove the `authoring`

@@ -14,9 +14,9 @@ permissions:
   contents: read
 
 jobs:
-  # FRIDAY v2 is a cloud-only (API-brain) app living entirely under `friday/`.
-  # The legacy intent/PyQt/llama stack was purged in Phase 8, so CI now lints
-  # and tests only the v2 package.
+  # Namma Agent is a cloud-only (API-brain) app living entirely under `namma_agent/`.
+  # The legacy intent/PyQt/llama stack was removed in the cloud-only rebuild, so
+  # CI lints and tests only the `namma_agent/` package.
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
@@ -31,7 +31,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff
       - name: Ruff (lint)
-        run: ruff check friday/
+        run: ruff check namma_agent/
 
   test:
     name: pytest (${{ matrix.os }}, py${{ matrix.python-version }})
@@ -58,8 +58,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r friday/requirements.txt
+          pip install -r namma_agent/requirements.txt
           pip install pytest
 
       - name: Run v2 test suite
-        run: python -m pytest friday/tests/ -q
+        run: python -m pytest namma_agent/tests/ -q

@@ -1,7 +1,7 @@
-# FRIDAY — Skills (Procedural Memory)
+# Namma Agent — Skills (Procedural Memory)
 
 A **skill** is a reusable playbook: a Markdown procedure the assistant can load and
-follow when a request matches it. Skills are how FRIDAY remembers *how to do things*
+follow when a request matches it. Skills are how Namma Agent remembers *how to do things*
 (as opposed to *facts*, which live in memory). They are plain files — editable,
 portable, and the assistant can author its own.
 
@@ -18,8 +18,8 @@ creates and refines them. To write one yourself, see [EXTENDING.md](EXTENDING.md
 - `SKILL.md` has **YAML frontmatter** (name, description, platforms, category, tags)
   and a **markdown body** (the actual procedure).
 - Skills live under two roots:
-  - **Bundled** — `friday/skills/` (ships with FRIDAY).
-  - **Learned / user** — `~/.friday/skills/` (where `create_skill` writes).
+  - **Bundled** — `namma_agent/skills/` (ships with Namma Agent).
+  - **Learned / user** — `~/.namma_agent/skills/` (where `create_skill` writes).
 - On a name collision, **the learned skill wins**, so the assistant can override a
   bundled procedure with a better one it learned.
 
@@ -128,7 +128,7 @@ The model drives skills through four tools (registered in `core/builtins.py`):
 |------|--------------|
 | `list_skills` | List available skills + descriptions (introspection). |
 | `use_skill {name}` | Load and return the full procedure to follow. **Call this first** when a request matches a skill. |
-| `create_skill {name, description, body, category?, tags?}` | Author a new skill into `~/.friday/skills/`. |
+| `create_skill {name, description, body, category?, tags?}` | Author a new skill into `~/.namma_agent/skills/`. |
 | `update_skill {name, body?, description?}` | Refine an existing skill. |
 
 ---
@@ -151,7 +151,7 @@ sequenceDiagram
     U->>M: a novel multi-step request (no matching skill)
     M->>M: solve it with tools, step by step
     M->>S: create_skill(name, description, body=the procedure that worked)
-    S->>S: write ~/.friday/skills/<slug>/SKILL.md + reload()
+    S->>S: write ~/.namma_agent/skills/<slug>/SKILL.md + reload()
     Note over S: now in the catalog for next time
     U->>M: a similar request later
     M->>S: use_skill(name) → follows the saved procedure
@@ -160,7 +160,7 @@ sequenceDiagram
 
 `create_skill` (via `SkillStore.create`):
 1. Slugifies the name (`Deep Research` → `deep-research`).
-2. Creates `~/.friday/skills/<slug>/SKILL.md` with generated frontmatter (all
+2. Creates `~/.namma_agent/skills/<slug>/SKILL.md` with generated frontmatter (all
    platforms, version `1.0.0`, your category/tags) + your body.
 3. Calls `reload()` so the skill is **immediately** in the catalog.
 
@@ -178,9 +178,9 @@ shipped procedure.
 ## 6. Configuration
 
 ```yaml
-# friday/config.yaml
+# namma_agent/config.yaml
 skills:
-  user_dir: ~/.friday/skills      # where create_skill writes learned skills
+  user_dir: ~/.namma_agent/skills      # where create_skill writes learned skills
   allow_inline_shell: false       # expand !`cmd` snippets inside SKILL.md (off by default)
 ```
 
