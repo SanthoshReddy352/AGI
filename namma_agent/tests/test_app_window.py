@@ -3,7 +3,6 @@ Linux PyGObject bridge that keeps the app from silently falling back to a browse
 tab. These run offline — no window is ever opened."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import namma_agent.app as app

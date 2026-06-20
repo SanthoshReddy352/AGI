@@ -69,7 +69,9 @@ def freeze(ver: str):
     """PyInstaller-freeze installer/ with the staged app bundled in."""
     sep = ";" if os.name == "nt" else ":"
     onefile = platform.system() != "Darwin"   # macOS wants a .app (onedir) for the .dmg
-    args = ["pyinstaller", "--noconfirm", "--clean", "--windowed", "--name", NAME,
+    # `python -m PyInstaller` (not the `pyinstaller` script) so it works regardless
+    # of whether the Scripts/bin dir is on PATH.
+    args = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--windowed", "--name", NAME,
             "--add-data", f"{APP}{sep}app",
             "--distpath", DIST, "--workpath", BUILD / "pyi", "--specpath", BUILD]
     if onefile:

@@ -1,0 +1,17 @@
+# Ruff configuration for Namma Agent (used by CI: `ruff check namma_agent/`).
+target-version = "py310"
+line-length = 100
+
+[lint]
+# Default rules (E4/E7/E9/F) plus: keep the meaningful correctness checks (unused
+# imports, undefined names, unused variables) and ignore purely-stylistic
+# compact-statement rules the codebase uses deliberately.
+ignore = [
+    "E701",  # multiple statements on one line (colon) — used in tiny test stubs
+    "E702",  # multiple statements on one line (semicolon) — compact assignments
+    "E741",  # ambiguous variable name (l/I/O) — occasional local in math code
+]
+
+[lint.per-file-ignores]
+# Re-export shims and fixtures: unused imports are intentional there.
+"**/__init__.py" = ["F401"]

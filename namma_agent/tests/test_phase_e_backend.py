@@ -2,12 +2,11 @@
 markitdown, self-knowledge, self-authoring, gws graceful-degrade."""
 from __future__ import annotations
 
-from pathlib import Path
 
 from namma_agent.core.agent import Agent
 from namma_agent.core.memory import Database
 from namma_agent.core.persona import load_persona
-from namma_agent.core.providers.base import LLMResponse, Provider, ToolCall
+from namma_agent.core.providers.base import LLMResponse, Provider
 from namma_agent.core.tools import ToolRegistry, ToolResult
 
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import html as _html
 import re as _re
+from typing import Optional
 
 from namma_agent.core.memory import Database
 from namma_agent.core.persona import (

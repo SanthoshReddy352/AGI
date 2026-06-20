@@ -11,7 +11,6 @@ import pytest
 from namma_agent.core.safety import is_destructive
 from namma_agent.core.tools import ToolRegistry
 from namma_agent.tools import load_tools
-from namma_agent.tools import documents as docmod
 from namma_agent.tools import news as newsmod
 from namma_agent.tools import scheduler as schedmod
 from namma_agent.tools import smart_home as ha

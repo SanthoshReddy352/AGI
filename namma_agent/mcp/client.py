@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import subprocess
 import threading
-from typing import Any, Optional
+from typing import Optional
 
 from namma_agent.core.logger import logger
 

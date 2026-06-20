@@ -914,7 +914,6 @@ class Database:
         if not topic:
             return None
         plan = topic.get("plan") or []
-        ids = [m["id"] for m in plan]
         for m in plan:
             if m["id"] == module_id:
                 m["status"] = status

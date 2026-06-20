@@ -1,7 +1,7 @@
 """Tests for the skill system (procedural memory ported from hermes-agent)."""
 from __future__ import annotations
 
-from pathlib import Path
+import os
 
 import pytest
 
@@ -70,6 +70,8 @@ def test_update_skill(tmp_path):
     assert "New body" in store.render("temp")
 
 
+@pytest.mark.skipif(os.name == "nt",
+                    reason="inline-shell expansion uses /bin/bash (POSIX only)")
 def test_inline_shell_opt_in(tmp_path):
     udir = tmp_path / "skills"
     (udir / "echoer").mkdir(parents=True)

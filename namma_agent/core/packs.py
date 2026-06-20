@@ -90,7 +90,7 @@ def _install_prompt(created_by: str, skills: list[dict], tools: list[dict]) -> s
         "",
         "This is a shareable pack of assistant-authored skills and tools. To install:",
         "",
-        f"- **In the app:** open **Settings → Packs → Import**, choose this `.zip`, "
+        "- **In the app:** open **Settings → Packs → Import**, choose this `.zip`, "
         "review the contents, and approve any tools you trust.",
         "- **Hands-free:** hand this file to your assistant and say *\"install this pack\"*.",
         "",

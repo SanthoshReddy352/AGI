@@ -231,7 +231,7 @@ def test_teaching_turn_streams_image_in_place_after_render(db, topic, monkeypatc
     ]
     agent, _ = _agent_with_media(db, responses)
     chunks = []
-    result = agent.process_turn("teach me", session_id=sid, on_token=chunks.append)
+    agent.process_turn("teach me", session_id=sid, on_token=chunks.append)
 
     streamed = "".join(chunks)
     # The image was part of the LIVE stream (replay), not only the final content …
@@ -434,7 +434,6 @@ def test_mark_module_complete_resolves_module_from_session(db, topic):
     runs in — not the global 'current' pointer (they diverge when jumping around)."""
     db.mark_module(topic["id"], "m1", "done")  # current pointer now m2
     events = []
-    from namma_agent.core.interactive import set_event_sink
     registry = ToolRegistry()
     register_learning_tools(registry, db)
     sid3 = _module_sid(db, topic, "m3")
@@ -462,7 +461,6 @@ def test_pose_quiz_attributes_to_session_module(db, topic):
     current pointer says m2."""
     db.mark_module(topic["id"], "m1", "done")  # pointer moves to m2
     events = []
-    from namma_agent.core.interactive import set_event_sink
     registry = ToolRegistry()
     register_learning_tools(registry, db)
     set_current_session(_module_sid(db, topic, "m1"))
@@ -519,7 +517,6 @@ def test_pose_quiz_dedupes_code_block(db, topic):
     """When the model puts the snippet in BOTH the question (a fenced block) and the
     code field, the card shows it ONCE: the fenced block is stripped from the question
     and the dedicated code slot carries it."""
-    from namma_agent.core.interactive import set_event_sink
     registry = ToolRegistry()
     register_learning_tools(registry, db)
     set_current_session(_module_sid(db, topic, "m1"))
@@ -543,7 +540,6 @@ def test_pose_quiz_dedupes_code_block(db, topic):
 
 def _pose(db, topic, mid):
     """Pose a quiz in a module thread; returns (session_id, payload)."""
-    from namma_agent.core.interactive import set_event_sink
 
     events = []
     registry = ToolRegistry()
