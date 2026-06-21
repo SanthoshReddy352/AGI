@@ -60,7 +60,14 @@ def _serve(service: NammaAgentService) -> None:
 
         from namma_agent.server.api import create_app
 
-        uvicorn.run(create_app(service), host=_HOST, port=_PORT, log_level="warning")
+        # log_config=None: do NOT let uvicorn install its own logging. Its default
+        # ColourizedFormatter calls sys.stdout.isatty(), but under pythonw (the
+        # windowed launcher, no console) sys.stdout is None → "ValueError: Unable to
+        # configure formatter 'default'", which crashed this thread and surfaced as
+        # the "127.0.0.1 refused to connect" page. The app already set up logging in
+        # _build_service(); uvicorn's loggers propagate to it.
+        uvicorn.run(create_app(service), host=_HOST, port=_PORT,
+                    log_level="warning", log_config=None)
     except BaseException as exc:  # noqa: BLE001 — surface every startup failure
         _serve_error = exc
         logger.exception("[app] backend failed to start")
@@ -301,6 +308,32 @@ def _patch_pywebview_for_windows() -> None:
     logger.info("[app] patched WebView2 for copy/paste + live title")
 
 
+def _centered_geometry(width: int, height: int) -> tuple[int | None, int | None, int, int]:
+    """Center the window on the primary screen and clamp it to fit.
+
+    pywebview with no x/y lets the OS pick a default location, which on smaller or
+    DPI-scaled displays drops a large window half off-screen (the "I have to drag it
+    onto the screen" bug). We read the screen from ``webview.screens`` (logical units
+    that match create_window's width/height) and compute a centered, clamped spot.
+    Returns (x, y, width, height); x/y are None if the screen can't be read (let the
+    OS decide rather than guess wrong)."""
+    try:
+        import webview
+
+        screens = webview.screens
+        s = screens[0] if screens else None
+        if s and s.width and s.height:
+            sw, sh = int(s.width), int(s.height)
+            width = min(width, int(sw * 0.92))
+            height = min(height, int(sh * 0.90))
+            x = max(0, (sw - width) // 2)
+            y = max(0, (sh - height) // 2)
+            return x, y, width, height
+    except Exception:  # noqa: BLE001 — never let placement math break the launch
+        pass
+    return None, None, width, height
+
+
 def _error_html(detail: str) -> str:
     """A friendly in-window page shown when the backend never became reachable —
     so the user sees an explanation + Retry instead of WebView2's raw
@@ -309,12 +342,12 @@ def _error_html(detail: str) -> str:
     return f"""<!doctype html><html><head><meta charset='utf-8'>
 <style>
   body{{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
-       font-family:Inter,Segoe UI,system-ui,sans-serif;background:#faf9f5;color:#2d2a26}}
+       font-family:Inter,Segoe UI,system-ui,sans-serif;background:#f6f8fc;color:#10131a}}
   .card{{max-width:520px;text-align:center;padding:40px}}
-  h1{{font-size:22px;margin:0 0 10px}} p{{color:#6b6760;line-height:1.6;font-size:14px}}
-  code{{display:block;margin-top:14px;padding:12px;background:#efece3;border-radius:10px;
-        font-family:Consolas,monospace;font-size:12px;color:#b8623f;word-break:break-word}}
-  button{{margin-top:22px;border:0;border-radius:10px;background:#cc785c;color:#fff;
+  h1{{font-size:22px;margin:0 0 10px}} p{{color:#5a606e;line-height:1.6;font-size:14px}}
+  code{{display:block;margin-top:14px;padding:12px;background:#eef1f7;border-radius:10px;
+        font-family:Consolas,monospace;font-size:12px;color:#2f6bff;word-break:break-word}}
+  button{{margin-top:22px;border:0;border-radius:10px;background:#2f6bff;color:#fff;
           padding:12px 26px;font-size:15px;font-weight:600;cursor:pointer}}
 </style></head><body><div class='card'>
   <h1>Starting up is taking longer than usual</h1>
@@ -351,11 +384,12 @@ def _launch_window(service: NammaAgentService, server_thread: threading.Thread,
     for gui in _gui_order():
         with suppress(Exception):
             webview.windows.clear()  # drop any window from a failed prior attempt
+        gx, gy, gw, gh = _centered_geometry(1100, 760)
         win_kwargs = dict(
-            width=1100, height=760, min_size=(720, 560),
+            width=gw, height=gh, x=gx, y=gy, min_size=(720, 560),
             # Match the app's default (light) shell so there's no jarring flash of
-            # plain white before React paints. (webui body bg is #faf9f5.)
-            background_color="#faf9f5",
+            # plain white before React paints. (webui body bg is #f6f8fc.)
+            background_color="#f6f8fc",
         )
         if healthy:
             webview.create_window(title, _URL, **win_kwargs)

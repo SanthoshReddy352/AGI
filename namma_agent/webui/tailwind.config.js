@@ -5,13 +5,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        // claude.ai-style warm palette
-        paper: { DEFAULT: "#faf9f5", soft: "#f3f1ea", panel: "#ffffff", sink: "#efece3" },
-        ink: { DEFAULT: "#2d2a26", soft: "#6b6760", faint: "#9c978d" },
-        line: { DEFAULT: "#e8e4d9", soft: "#f0ede4" },
-        brand: { DEFAULT: "#cc785c", soft: "#e0a890", deep: "#b8623f", wash: "#f6ece6" },
-        // dark surfaces
-        night: { DEFAULT: "#262624", soft: "#30302e", panel: "#2f2f2d", line: "#3d3d3a", ink: "#ece9e2", faint: "#a8a39a" },
+        // Clean blue/white/black palette (adapted from the installer): white panels
+        // on a soft blue-grey canvas, near-black ink, a confident blue accent.
+        paper: { DEFAULT: "#f6f8fc", soft: "#eef1f7", panel: "#ffffff", sink: "#e9edf5" },
+        ink: { DEFAULT: "#10131a", soft: "#5a606e", faint: "#9aa0ad" },
+        line: { DEFAULT: "#e6e9f0", soft: "#eff1f6" },
+        brand: { DEFAULT: "#2f6bff", soft: "#e7eeff", deep: "#1f4fd6", wash: "#f1f5ff" },
+        // Dark surfaces — a cool slate/navy that pairs with the same blue accent, so
+        // dark mode is a faithful counterpart of the light theme (not a separate look).
+        night: { DEFAULT: "#0d1017", soft: "#141925", panel: "#1a2030", line: "#28303f", ink: "#e7ecf5", faint: "#98a1b3" },
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "Segoe UI", "sans-serif"],

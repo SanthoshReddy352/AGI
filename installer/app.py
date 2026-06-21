@@ -167,6 +167,25 @@ class Bridge:
                 self.window.destroy()
 
 
+def _centered_geometry(width: int, height: int):
+    """Center the installer window on the primary screen, clamped to fit — so it
+    never opens half off-screen on smaller / DPI-scaled displays. Returns
+    (x, y, width, height); x/y are None if the screen can't be read."""
+    try:
+        import webview
+
+        screens = webview.screens
+        s = screens[0] if screens else None
+        if s and s.width and s.height:
+            sw, sh = int(s.width), int(s.height)
+            width = min(width, int(sw * 0.92))
+            height = min(height, int(sh * 0.90))
+            return max(0, (sw - width) // 2), max(0, (sh - height) // 2), width, height
+    except Exception:  # noqa: BLE001
+        pass
+    return None, None, width, height
+
+
 def main() -> None:
     import webview
 
@@ -184,9 +203,10 @@ def main() -> None:
         cand = Path(assets) / "namma_agent" / "assets" / ("sparkle.ico" if os.name == "nt" else "sparkle.png")
         icon = str(cand) if cand.exists() else None
 
+    gx, gy, gw, gh = _centered_geometry(980, 720)
     window = webview.create_window(
         title, str(index), js_api=bridge,
-        width=980, height=720, min_size=(820, 620),
+        width=gw, height=gh, x=gx, y=gy, min_size=(820, 620),
         background_color="#f5f7fb",
     )
     bridge.window = window

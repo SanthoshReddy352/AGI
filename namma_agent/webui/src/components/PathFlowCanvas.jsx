@@ -66,7 +66,7 @@ export default function PathFlowCanvas({ plan = [], currentId, onOpen, dark = fa
         target: next.id,
         type: "smoothstep",
         animated: active,
-        style: { strokeWidth: 2.2, stroke: m.status === "done" ? "#10b981" : "#b8b2a7" },
+        style: { strokeWidth: 2.2, stroke: m.status === "done" ? "#10b981" : "#c2c9d6" },
       };
     });
     return { nodes, edges };
@@ -98,7 +98,7 @@ export default function PathFlowCanvas({ plan = [], currentId, onOpen, dark = fa
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable className="!bg-paper-soft dark:!bg-night-panel"
                  nodeColor={(n) => (n.data?.status === "done" ? "#10b981"
-                   : n.data?.isCurrent ? "#cc785c" : "#d6d0c4")} />
+                   : n.data?.isCurrent ? "#2f6bff" : "#cbd2de")} />
       </ReactFlow>
     </div>
   );

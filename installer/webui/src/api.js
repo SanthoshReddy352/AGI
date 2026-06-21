@@ -2,24 +2,35 @@
 // browser dev-mock so `npm run dev` previews the full flow without Python.
 
 const hasBridge = () =>
-  typeof window !== "undefined" && window.pywebview && window.pywebview.api;
+  typeof window !== "undefined" &&
+  window.pywebview &&
+  window.pywebview.api &&
+  typeof window.pywebview.api.get_defaults === "function";
 
-// Resolves once the pywebview bridge is injected (or immediately in dev-mock mode).
+// Resolves once the REAL pywebview bridge is fully injected (its methods registered),
+// or falls back to the browser dev-mock only when there's genuinely no pywebview
+// (i.e. running under vite dev). Polling avoids the race where `pywebviewready` fires
+// before our listener attaches, or the API isn't registered yet at 600 ms.
 export function ready() {
   return new Promise((resolve) => {
-    if (hasBridge()) return resolve(true);
-    let settled = false;
-    const done = () => {
-      if (settled) return;
-      settled = true;
-      resolve(true);
+    const t0 = Date.now();
+    const poll = () => {
+      if (hasBridge()) return resolve("bridge");
+      const elapsed = Date.now() - t0;
+      // pywebview injects `window.pywebview` almost immediately; if it's entirely
+      // absent after a short grace, we're in a plain browser → use the mock.
+      if (!window.pywebview && elapsed > 1500) {
+        installDevMock();
+        return resolve("mock");
+      }
+      // Last resort so the UI is never permanently dead.
+      if (elapsed > 15000) {
+        installDevMock();
+        return resolve("mock");
+      }
+      setTimeout(poll, 80);
     };
-    window.addEventListener("pywebviewready", done, { once: true });
-    // Fall back to the dev mock if no bridge appears shortly (plain browser).
-    setTimeout(() => {
-      if (!hasBridge()) installDevMock();
-      done();
-    }, 600);
+    poll();
   });
 }
 

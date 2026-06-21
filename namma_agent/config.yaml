@@ -8,7 +8,7 @@
 # prompt, the web UI, the voice, and the messaging bridges. You can also
 # override it without editing this file via the ASSISTANT_NAME env var.
 assistant:
-  name: Heaven
+  name: Namma Agent
 
 # ── Provider (the brain) ───────────────────────────────────────────
 provider:

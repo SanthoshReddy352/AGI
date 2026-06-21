@@ -2,7 +2,7 @@ import { useId } from "react";
 
 // Brand mark — "Orbit Spark": a four-point spark of insight crossed by a tilted
 // orbit ring. Name-independent art (no letter). Scales crisply from favicon to
-// hero. `size` is px; colors come from the brand terracotta gradient.
+// hero. `size` is px; colors come from the brand blue gradient.
 export default function Logo({ size = 28, className = "", title = "" }) {
   const id = useId().replace(/:/g, "");
   const gid = `lg-${id}`;
@@ -18,15 +18,15 @@ export default function Logo({ size = 28, className = "", title = "" }) {
     >
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#e0a890" />
-          <stop offset="0.55" stopColor="#cc785c" />
-          <stop offset="1" stopColor="#b8623f" />
+          <stop offset="0" stopColor="#6f9bff" />
+          <stop offset="0.55" stopColor="#2f6bff" />
+          <stop offset="1" stopColor="#1f4fd6" />
         </linearGradient>
       </defs>
       {/* tilted orbit ring */}
       <ellipse
         cx="50" cy="50" rx="44" ry="19" fill="none"
-        stroke="#cc785c" strokeWidth="3" opacity="0.45"
+        stroke="#2f6bff" strokeWidth="3" opacity="0.45"
         transform="rotate(-28 50 50)"
       />
       {/* main four-point spark (concave diamond) */}
@@ -37,7 +37,7 @@ export default function Logo({ size = 28, className = "", title = "" }) {
       {/* accent mini-spark */}
       <path
         d="M 78 18 C 79 25.5 81 27.5 88.5 28.5 C 81 29.5 79 31.5 78 39 C 77 31.5 75 29.5 67.5 28.5 C 75 27.5 77 25.5 78 18 Z"
-        fill="#e0a890"
+        fill="#6f9bff"
       />
     </svg>
   );

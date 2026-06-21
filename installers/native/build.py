@@ -83,6 +83,14 @@ def stage_app():
     dst.mkdir(parents=True, exist_ok=True)
     shutil.copytree(webui / "dist", dst, dirs_exist_ok=True)
 
+    # Never ship machine-specific overlays or secrets — a fresh install must use the
+    # tracked defaults (assistant name "Namma Agent"), not a dev's local name/keys.
+    for leak in ("namma_agent/config.local.yaml", "config.local.yaml", ".env"):
+        p = APP / leak
+        if p.exists():
+            p.unlink()
+            print(f"  (stripped {leak} from the bundle)", flush=True)
+
 
 def _icon():
     """A natively-valid PyInstaller icon for THIS OS, or None. Windows uses .ico;

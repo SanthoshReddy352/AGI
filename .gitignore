@@ -97,6 +97,11 @@ data/*.json
 .env.*.bak
 *.env.bak
 
+# Local config overlay — machine-specific (assistant name, provider keys, persona).
+# Must NEVER be committed/shipped: it was leaking a dev's `name: Aria` into installs.
+config.local.yaml
+namma_agent/config.local.yaml
+
 # Desktop installer / packaging build output
 installers/build/
 installers/dist/

@@ -18,17 +18,27 @@ export default function App() {
   const [verifyState, setVerifyState] = useState("idle"); // idle|checking|ok|bad
   const dirRef = useRef("");
 
-  // Load defaults + wire the Python→JS event channel once.
+  // Load defaults + wire the Python→JS event channel once. Retries until the
+  // bridge returns a populated payload, so the provider/onboarding screens are
+  // never blank from a cold-start race.
   useEffect(() => {
     let live = true;
-    ready().then(async () => {
-      const d = await Installer.getDefaults();
-      if (!live) return;
-      setDefaults(d);
-      setSteps(d.steps || []);
-      setInstallDir(d.default_install_dir);
-      dirRef.current = d.default_install_dir;
-    });
+    const load = async (tries = 0) => {
+      try {
+        const d = await Installer.getDefaults();
+        if (live && d && Array.isArray(d.providers) && d.providers.length) {
+          setDefaults(d);
+          setSteps(d.steps || []);
+          setInstallDir(d.default_install_dir);
+          dirRef.current = d.default_install_dir;
+          return;
+        }
+      } catch {
+        /* fall through to retry */
+      }
+      if (live && tries < 20) setTimeout(() => load(tries + 1), 250);
+    };
+    ready().then(() => load());
     onEvents({
       onSteps: (s) => setSteps(s),
       onLog: (line) => setLog((l) => [...l, line]),

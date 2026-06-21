@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.2.4] — Namma Agent Installer
+
+### Changed
+- **Installer Updated for Better User Experience**  
+- **Update the Theme of the Application**  
+
 ## [2.2.3] — Namma Agent Installer
 
 ### Changed
