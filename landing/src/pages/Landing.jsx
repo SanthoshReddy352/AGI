@@ -37,7 +37,7 @@ const mobileItems = [
 
 export default function Landing() {
   return (
-    <>
+    <div className="landing-wrap">
       <Nav items={navItems} mega={Mega} showCmdk cta={{ id: "start", label: "Run it" }} mobileItems={mobileItems} />
 
       {/* command palette */}
@@ -309,6 +309,6 @@ python -m namma_agent --server{"\n"}
       </main>
 
       <Footer />
-    </>
+    </div>
   );
 }

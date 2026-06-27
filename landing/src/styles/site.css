@@ -4,6 +4,12 @@
    it only composes the primitives.
    ============================================================ */
 
+.landing-wrap {
+  overflow-x: hidden;
+  width: 100%;
+  position: relative;
+}
+
 /* ---------- Hero ---------- */
 /* Full-bleed hero: spans the full viewport width (not capped by .shell), with
    comfortable side padding. Top padding is just enough to clear the fixed nav,
@@ -11,8 +17,7 @@
 .na-hero {
   width: 100%;
   position: relative;
-  overflow-x: clip;
-  overflow-y: visible;
+  overflow: hidden;
   padding: 100px 0 var(--section-y-sm);
 }
 /* Center the glow on the top-right corner so the gradient reads as starting
@@ -30,8 +35,7 @@
     padding-inline: 0;
     margin: 0;
     width: 100%;
-    overflow-x: clip;
-    overflow-y: visible;
+    overflow: hidden;
   }
   .na-hero__grid {
     grid-template-columns: minmax(0, 1fr);
