@@ -245,6 +245,11 @@ Each degrades gracefully — if the binary is missing, the tool returns a clear
   chromium`). If both are unavailable it degrades to a text outline.
 - **Google Workspace:** the [`gws` CLI](https://github.com/googleworkspace/cli) for
   the Gmail/Calendar tools (`gws auth login` once).
+- **Cognee memory (optional):** semantic + knowledge-graph memory via
+  [Cognee](https://www.cognee.ai), run fully containerized and reached through the
+  built-in MCP client — so it adds **no** Python dependencies. Needs only Docker;
+  one-command setup with [`scripts/setup_cognee.ps1`](scripts/setup_cognee.ps1) /
+  [`scripts/setup_cognee.sh`](scripts/setup_cognee.sh). See **[docs/COGNEE.md](docs/COGNEE.md)**.
 
 ---
 
@@ -256,6 +261,8 @@ Each degrades gracefully — if the binary is missing, the tool returns a clear
 - **[docs/EXTENDING.md](docs/EXTENDING.md)** — create your own tools and skills.
 - **[docs/SELF_MODIFICATION.md](docs/SELF_MODIFICATION.md)** — how the assistant extends
   and reconfigures itself at runtime.
+- **[docs/COGNEE.md](docs/COGNEE.md)** — optional Cognee semantic + knowledge-graph memory
+  (runs containerized via MCP; adds **no** Python dependencies).
 
 ---
 

@@ -1,0 +1,20 @@
+flowchart TB
+  AG["Agent"]
+  subgraph DB["SQLite — data/namma_agent.db"]
+    direction LR
+    S["sessions"]
+    T["turns"]
+    F["facts<br/>FTS5 full-text"]
+    AU["audit"]
+    S --> T
+  end
+  N["Curated notes<br/>USER.md · MEMORY.md"]
+
+  AG -->|"remember_fact / recall_facts"| F
+  AG -->|"every turn"| T
+  AG -->|"summarize_session"| S
+  AG -->|"tool calls logged"| AU
+  AG -->|"curate"| N
+
+  class F accent
+  classDef accent fill:#DF4B2A,stroke:#C13C1F,color:#FFFEFB;

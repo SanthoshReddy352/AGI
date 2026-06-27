@@ -412,14 +412,17 @@ def register_project_tools(registry: ToolRegistry, db: Database) -> None:
 
 
 def register_learning_tools(registry: ToolRegistry, db: Database,
-                            get_comms=None, config: dict | None = None) -> None:
+                            get_comms=None, config: dict | None = None,
+                            get_cognee_ingestor=None) -> None:
     """Learning-Room teacher tools: plan the path, mark progress, quiz, score the
     learner, save topic memory, and (from a normal chat) suggest the Learning Room.
     Scope is resolved from the turn-local session via the learning topic it belongs
     to; quiz/suggestion push typed events straight to the browser.
 
     ``get_comms`` lazily resolves the CommsManager (it's built after the registry)
-    so module-completion progress can be pushed to Telegram when configured."""
+    so module-completion progress can be pushed to Telegram when configured.
+    ``get_cognee_ingestor`` lazily resolves the CogneeIngestor so a completed
+    module's recap also grows the Cognee knowledge graph (no-op unless connected)."""
     from namma_agent.core.interactive import emit_event, get_current_session
 
     def _topic():
@@ -485,6 +488,7 @@ def register_learning_tools(registry: ToolRegistry, db: Database,
         if recap and module:
             db.add_scope_memory("learning", topic["id"],
                                 f"Module recap — {module['title']}: {recap}")
+            _ingest_learning_recap(topic, module, recap)
         updated = db.mark_module(topic["id"], mid, "done")
         plan = (updated or {}).get("plan") or []
         nxt = next((m for m in plan if m.get("status") == "current"), None)
@@ -504,6 +508,21 @@ def register_learning_tools(registry: ToolRegistry, db: Database,
         tail = f" Next module: \"{nxt['title']}\" (the learner opens it from the path)." if nxt \
             else " That was the final module — the path is complete."
         return ToolResult(ok=True, content=f"Module '{mid}' marked complete.{tail}")
+
+    def _ingest_learning_recap(topic: dict, module: Optional[dict], recap: str) -> None:
+        """Grow the Cognee knowledge graph from what the learner just studied. The
+        recap (concepts + the running example) is queued for background cognify so a
+        completed module shows up as entities/relationships in the Memory graph.
+        Best-effort: silently no-ops when Cognee isn't wired or connected."""
+        ingestor = get_cognee_ingestor() if get_cognee_ingestor else None
+        if ingestor is None:
+            return
+        text = (f"Learning topic \"{topic.get('title', '')}\" — completed module "
+                f"\"{(module or {}).get('title', '')}\". {recap}")
+        try:
+            ingestor.ingest_learning(text)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _notify_progress(topic: dict, module: Optional[dict], updated: Optional[dict]) -> None:
         """Push module-completion progress to Telegram/Discord (config-gated,

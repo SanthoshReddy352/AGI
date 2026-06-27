@@ -1,0 +1,13 @@
+flowchart TB
+  A["User message"] --> B["Generate<br/>model call"]
+  B --> C{"Tool calls?"}
+  C -- "no" --> F["Stream final answer"]
+  C -- "yes" --> D{"Sensitive or<br/>destructive?"}
+  D -- "yes" --> G["Approval gate"]
+  G --> E["Run tools"]
+  D -- "no" --> E
+  E --> H["Append tool results"]
+  H --> B
+
+  class F accent
+  classDef accent fill:#DF4B2A,stroke:#C13C1F,color:#FFFEFB;

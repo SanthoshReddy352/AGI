@@ -1,0 +1,11 @@
+flowchart LR
+  U["Upload<br/>up to 25 files"] --> X["Text extract<br/>MarkItDown"]
+  X --> SCRN{"Injection<br/>screen"}
+  SCRN -- "flagged" --> Q["Quarantine<br/>out of retrieval"]
+  SCRN -- "clean" --> C["Structure-aware<br/>chunk"]
+  C --> I["Index<br/>SQLite FTS5"]
+  I --> R["Retrieve<br/>BM25 + diversity + stitch"]
+  R --> A["Grounded answer<br/>file + section citations"]
+
+  class A accent
+  classDef accent fill:#DF4B2A,stroke:#C13C1F,color:#FFFEFB;

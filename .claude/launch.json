@@ -21,6 +21,20 @@
       "runtimeArgs": ["-m", "namma_agent", "--server"],
       "port": 8000,
       "autoPort": true
+    },
+    {
+      "name": "landing",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5174,
+      "cwd": "landing"
+    },
+    {
+      "name": "landing-dist",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["../scripts/serve.mjs"],
+      "port": 5510,
+      "cwd": "landing/dist"
     }
   ]
 }

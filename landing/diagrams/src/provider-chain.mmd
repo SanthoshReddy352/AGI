@@ -1,0 +1,11 @@
+flowchart LR
+  AG["Agent"] --> P1
+  subgraph CHAIN["ProviderChain — ordered fallback"]
+    direction TB
+    P1["Primary<br/>e.g. Anthropic"] -->|"down / error"| P2["Fallback 1<br/>OpenAI-compatible"]
+    P2 -->|"down / error"| P3["Fallback 2<br/>local Ollama"]
+  end
+  P1 --> OUT["Streamed tokens<br/>+ native tool calls"]
+
+  class P1 accent
+  classDef accent fill:#DF4B2A,stroke:#C13C1F,color:#FFFEFB;

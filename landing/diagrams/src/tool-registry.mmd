@@ -1,0 +1,13 @@
+flowchart TB
+  M["Model emits tool_call"] --> L["Registry lookup<br/>JSON-Schema params"]
+  L --> SC{"Sensitive or<br/>destructive?"}
+  SC -- "no" --> H["Handler runs"]
+  SC -- "yes" --> AP{"auto_approve?"}
+  AP -- "yes" --> H
+  AP -- "no" --> U{"Ask the user"}
+  U -- "approve" --> H
+  U -- "deny" --> X["Return refusal"]
+  H --> RES["Result back to model"]
+
+  class RES accent
+  classDef accent fill:#DF4B2A,stroke:#C13C1F,color:#FFFEFB;

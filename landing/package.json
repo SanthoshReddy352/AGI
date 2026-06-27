@@ -1,0 +1,23 @@
+{
+  "name": "namma-agent-landing",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Namma Agent marketing site — landing + docs, built on the Vellum design system.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "diagrams": "node scripts/render-diagrams.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.17.0"
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.4.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}

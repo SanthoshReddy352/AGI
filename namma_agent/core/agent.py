@@ -31,6 +31,17 @@ from namma_agent.core.persona import Persona, load_persona
 from namma_agent.core.providers.base import ProviderError, USAGE_KEYS, Provider, usage_tokens
 from namma_agent.core.tools import ToolRegistry
 
+# Recall-style questions that should pull from Cognee before answering (used to gate
+# the optional proactive recall-context injection — see Agent._cognee_recall_context).
+_RECALL_HINT = re.compile(
+    r"\b(remember|recall|forget|forgot|"
+    r"who\s+am\s+i|about\s+me|my\s+name|"
+    r"what('?s| is| was| are| do| did| have)?\s+(i|my|me|we|our)\b|"
+    r"do\s+you\s+(know|remember)|did\s+i\s+(tell|mention|say)|"
+    r"have\s+i\s+(told|mentioned|said)|remind\s+me|last\s+time|earlier|before)\b",
+    re.IGNORECASE,
+)
+
 
 def _generate_timeout(provider: Provider) -> float:
     """Hard wall-clock ceiling for one model call. Generous enough to let the
@@ -340,6 +351,8 @@ class Agent:
         memory_notes=None,
         nudge_every: int = 6,
         memory_extractor=None,
+        cognee_ingestor=None,
+        cognee_recall_context=False,
     ):
         self.provider = provider
         self.registry = registry
@@ -355,6 +368,13 @@ class Agent:
         # durable user facts (the model rarely calls remember_fact itself). Left
         # None for sub-agents (delegate_task) so research turns don't write memory.
         self.memory_extractor = memory_extractor
+        # Optional CogneeIngestor: after each turn, opt-in async ingest of the turn
+        # into Cognee's knowledge graph (off the reply path). None for sub-agents.
+        self.cognee_ingestor = cognee_ingestor
+        # Opt-in: proactively inject Cognee recall for recall-style questions so memory
+        # is guaranteed in normal chat, even if the model skips the tool (default off →
+        # the model calls mcp_cognee_recall itself, keeping the Cognee usage visible).
+        self._cognee_recall_context_on = bool(cognee_recall_context)
 
     # -- sessions ----------------------------------------------------------
 
@@ -638,6 +658,9 @@ class Agent:
         # recall it — independent of whether the model called remember_fact.
         if self.memory_extractor is not None:
             self.memory_extractor.capture_async(provider, user_input, final_content)
+        # Opt-in: grow the Cognee knowledge graph from this turn (background worker).
+        if self.cognee_ingestor is not None:
+            self.cognee_ingestor.ingest_async(user_input, final_content)
         emit("turn_completed", {
             "session_id": session_id, "content": final_content, "tools_used": tools_used,
         })
@@ -819,10 +842,63 @@ class Agent:
         scope = self._scope_block(session_id)
         if scope:
             system = f"{system}\n\n{scope}"
+        # Steer the model to use Cognee memory when it's connected (agent mode only).
+        if not chat_mode and "mcp_cognee_recall" in self.registry:
+            system = (
+                f"{system}\n\nCOGNEE MEMORY — you have a persistent Cognee semantic + "
+                "knowledge-graph memory of THIS user that spans every past session.\n"
+                "- BEFORE answering ANY question about the user — their life, work, "
+                "projects, preferences, people, or anything they've told you before "
+                "(even in another chat, even reworded) — you MUST first call "
+                "`mcp_cognee_recall` with the question. It matches by meaning + entity "
+                "relationships, so it finds things keyword search misses. Treat its "
+                "result as the source of truth and answer from it.\n"
+                "- Never say you don't know or don't have something about the user "
+                "without calling `mcp_cognee_recall` first.\n"
+                "- When the user shares a durable fact worth keeping, call "
+                "`mcp_cognee_remember`. Prefer Cognee for recalling stored knowledge and "
+                "the connections between people, projects, and concepts."
+            )
+            # Optional airtight safety net: proactively retrieve relevant memory for
+            # recall-style questions and inject it, so the answer is grounded even if
+            # the model skips the tool call (opt-in: cognee.recall_context).
+            ctx = self._cognee_recall_context(user_input)
+            if ctx:
+                system += ctx
         messages: list[dict] = [{"role": "system", "content": system}]
         messages.extend(self.db.recent_turns(session_id, self.max_history_turns))
         messages.append({"role": "user", "content": user_input})
         return messages
+
+    def _cognee_recall_context(self, user_input: str) -> str:
+        """Opt-in (``cognee.recall_context``) safety net for the "Namma remembers you
+        in a fresh chat" experience: when the user asks something about themselves /
+        the past, proactively pull the answer from Cognee and inject it — so recall is
+        guaranteed even if the model wouldn't have called the tool. Bounded by a short
+        timeout and gated to recall-style questions, so normal chat is untouched."""
+        if not self._cognee_recall_context_on or "mcp_cognee_recall" not in self.registry:
+            return ""
+        text = (user_input or "").strip()
+        if len(text) < 6 or not _RECALL_HINT.search(text):
+            return ""
+        box: dict = {}
+
+        def _run():
+            try:
+                box["r"] = self.registry.execute("mcp_cognee_recall", {"query": text})
+            except Exception:  # noqa: BLE001
+                box["r"] = None
+
+        th = threading.Thread(target=_run, name="cognee-recall-ctx", daemon=True)
+        th.start()
+        th.join(timeout=12)          # never hang the turn on a slow recall
+        res = box.get("r")
+        answer = (getattr(res, "content", "") or "").strip() if getattr(res, "ok", False) else ""
+        if not answer or answer == "(no result)":
+            return ""
+        return ("\n\nRELEVANT MEMORY — retrieved from your Cognee knowledge graph for "
+                "THIS message (it reflects what the user told you earlier; answer from "
+                f"it):\n{answer[:1500]}")
 
     def _scope_block(self, session_id: str) -> str:
         """Project / Learning-Room context appended to the system prompt for a

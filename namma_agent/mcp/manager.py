@@ -49,17 +49,25 @@ class MCPManager:
                 logger.warning("[mcp] server %r has no command — skipping", name)
                 continue
             client = StdioMCPClient(name, command, env=cfg.get("env"), cwd=cfg.get("cwd"))
-            if not client.connect():
+            # Some servers cold-start slowly (e.g. a Dockerised server that runs DB
+            # migrations before answering the handshake). Allow a per-server override;
+            # default generously so a slow server isn't dropped, while a fast one still
+            # returns the instant it answers.
+            connect_timeout = int(cfg.get("connect_timeout") or 60)
+            if not client.connect(timeout=connect_timeout):
                 continue
             self.clients[name] = client
+            # Per-server tool-call timeout — heavy tools (e.g. graph build) can take
+            # minutes; a fast server is unaffected since it returns immediately.
+            call_timeout = int(cfg.get("call_timeout") or 120)
             for tool in client.list_tools():
-                count += self._register_tool(registry, name, client, tool)
+                count += self._register_tool(registry, name, client, tool, call_timeout)
         self._register_list_servers(registry)
         logger.info("[mcp] registered %d tool(s) from %d server(s)", count, len(self.clients))
         return count
 
     def _register_tool(self, registry: ToolRegistry, server: str,
-                       client: StdioMCPClient, tool: dict) -> int:
+                       client: StdioMCPClient, tool: dict, call_timeout: int = 120) -> int:
         tool_name = tool.get("name", "")
         if not tool_name:
             return 0
@@ -67,9 +75,9 @@ class MCPManager:
         schema = tool.get("inputSchema") or {"type": "object", "properties": {}}
         description = f"[{server}] " + (tool.get("description") or f"MCP tool {tool_name}")
 
-        def handler(args: dict, _client=client, _tool=tool_name) -> ToolResult:
+        def handler(args: dict, _client=client, _tool=tool_name, _timeout=call_timeout) -> ToolResult:
             try:
-                return ToolResult(ok=True, content=_client.call_tool(_tool, args))
+                return ToolResult(ok=True, content=_client.call_tool(_tool, args, timeout=_timeout))
             except Exception as exc:  # noqa: BLE001
                 return ToolResult(ok=False, content="", error=f"MCP error: {exc}")
 

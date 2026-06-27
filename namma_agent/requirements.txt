@@ -44,5 +44,11 @@ python-multipart         # document upload endpoint (multipart/form-data)
 #   upgrades the html fallback when pandoc is absent.
 markdown                 # convert_document: richer md → html fallback (optional)
 
+# ── COGNEE ENHANCED MEMORY (optional — NO pip deps) ────────────────
+# Cognee semantic + knowledge-graph memory runs FULLY CONTAINERIZED and is reached
+# through the built-in MCP client (Namma launches cognee/cognee-mcp via `docker run`).
+# It therefore adds NOTHING to this file — the only prerequisite is Docker.
+# Setup: scripts/setup_cognee.ps1 (or .sh). Guide: docs/COGNEE.md.
+
 # ── DEV ────────────────────────────────────────────────────────────
 pytest

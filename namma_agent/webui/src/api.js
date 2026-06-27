@@ -155,6 +155,21 @@ export const toggleToolset = (category, enabled) => jpost("/api/toolset/toggle",
 // ── MCP servers (Settings → MCP tab: Config + Servers) ───────────────────────
 export const fetchMcp = () => j("/api/mcp");
 export const reloadMcp = () => jpost("/api/mcp/reload");
+export const toggleMcpServer = (name, enabled) => jpost("/api/mcp/server/toggle", { name, enabled });
+
+// ── Cognee memory (Memory tab) ───────────────────────────────────────────────
+export const memoryStatus = () => j("/api/memory/status");
+export const memoryRecall = (query, topK = 8) => jpost("/api/memory/recall", { query, top_k: topK });
+export const memoryRemember = (text, permanent = true) => jpost("/api/memory/remember", { text, permanent });
+export const memoryConsolidate = () => jpost("/api/memory/consolidate", {});
+export const memoryCompare = (query) => jpost("/api/memory/compare", { query });
+export const memoryForget = (opts = {}) => jpost("/api/memory/forget", opts);
+export const memoryGraph = () => j("/api/memory/graph");
+
+// ── Cognee settings (Settings → Memory → Cognee) ─────────────────────────────
+export const fetchCogneeConfig = () => j("/api/cognee/config");
+export const saveCogneeConfig = (env, flags) => jpost("/api/cognee/config", { env, flags });
+export const registerCogneeServer = (body = {}) => jpost("/api/cognee/register", body);
 
 let _id = 0;
 const nextId = () => `m${++_id}`;

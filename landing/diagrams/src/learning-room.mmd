@@ -1,0 +1,12 @@
+flowchart TB
+  G["Goal or syllabus"] --> LV["Infer level"]
+  LV --> MP["Build module path"]
+  MP --> MOD["Teach one module<br/>own chat"]
+  MOD --> AS["Assess through<br/>conversation"]
+  AS --> GATE{"Confidence<br/>gate"}
+  GATE -- "not yet" --> MOD
+  GATE -- "passed" --> NEXT["Next module"]
+  NEXT --> MOD
+
+  class GATE accent
+  classDef accent fill:#DF4B2A,stroke:#C13C1F,color:#FFFEFB;

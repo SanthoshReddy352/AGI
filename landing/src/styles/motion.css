@@ -1,0 +1,151 @@
+/* ============================================================
+   VELLUM — Motion
+   Keyframes + scroll-reveal utilities. Transform/opacity only.
+   ============================================================ */
+
+/* ---- Scroll reveal: REPEATABLE (enter + exit, replays on revisit) ----
+   JS toggles .is-in whenever the element enters/leaves the viewport, so
+   the animation plays every time you arrive at a section, from anywhere. */
+[data-reveal] {
+  --rv-y: 26px;
+  --rv-x: 0px;
+  --rv-scale: 1;
+  --rv-blur: 0px;
+  opacity: 0;
+  transform: translate3d(var(--rv-x), var(--rv-y), 0) scale(var(--rv-scale));
+  filter: blur(var(--rv-blur));
+  transition:
+    opacity var(--t-reveal) var(--ease-out),
+    transform var(--t-reveal) var(--ease-out),
+    filter var(--t-reveal) var(--ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: transform, opacity, filter;
+}
+[data-reveal="left"]  { --rv-x: -34px; --rv-y: 0px; }
+[data-reveal="right"] { --rv-x: 34px;  --rv-y: 0px; }
+[data-reveal="scale"] { --rv-y: 0px; --rv-scale: 0.92; }
+[data-reveal="blur"]  { --rv-y: 14px; --rv-blur: 12px; }
+[data-reveal="rise"]  { --rv-y: 44px; --rv-scale: 0.98; }
+[data-reveal="drop"]  { --rv-y: -28px; }
+
+[data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* ---- Bento flow: inflow (stagger up+scale), outflow (settle down),
+   and an always-on ambient breathing on flagged tiles. ---- */
+.bento > [data-reveal] {
+  --rv-y: 40px;
+  --rv-scale: 0.94;
+  transition:
+    opacity var(--t-slow) var(--ease-out),
+    transform var(--t-slow) var(--ease-spring),
+    box-shadow var(--t-slow) var(--ease-out),
+    border-color var(--t-slow) var(--ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+@keyframes ambient-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(0, -6px, 0); }
+}
+.is-in[data-ambient] { animation: ambient-float 7s var(--ease-out) infinite; animation-delay: var(--reveal-delay, 0ms); }
+
+/* light sweep that runs across a tile forever (all-time flow) */
+@keyframes sweep {
+  0%   { transform: translateX(-120%) skewX(-18deg); }
+  60%, 100% { transform: translateX(320%) skewX(-18deg); }
+}
+.flow-sweep { position: relative; overflow: hidden; }
+.flow-sweep::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 36%;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 16%, transparent), transparent);
+  transform: translateX(-120%) skewX(-18deg);
+  animation: sweep 6s var(--ease-out) infinite;
+  pointer-events: none;
+}
+
+/* ---- Scroll progress bar (top hairline that fills with scroll) ---- */
+.scroll-progress {
+  position: fixed; top: 0; left: 0; right: 0; height: 2px;
+  z-index: 100;
+  background: var(--accent);
+  transform: scaleX(var(--sp, 0));
+  transform-origin: left;
+  transition: transform 80ms linear;
+}
+
+/* ---- Hero line cascade ---- */
+.line-rise { overflow: hidden; display: block; }
+.line-rise > span {
+  display: block;
+  transform: translateY(110%);
+  transition: transform var(--t-reveal) var(--ease-out);
+  transition-delay: var(--rise-delay, 0ms);
+}
+.is-loaded .line-rise > span { transform: translateY(0); }
+
+/* ---- Floating ambient orbs behind hero (subtle, slow) ---- */
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(0, -26px, 0) scale(1.06); }
+}
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.5;
+  animation: drift 14s var(--ease-out) infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---- Page entrance curtain ---- */
+@keyframes curtain-up {
+  to { transform: translateY(-100%); }
+}
+
+/* ---- Marquee ---- */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.marquee {
+  display: flex;
+  gap: var(--s-7);
+  width: max-content;
+  animation: marquee 28s linear infinite;
+}
+.marquee-mask {
+  overflow: hidden;
+  -webkit-mask: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.marquee-mask:hover .marquee { animation-play-state: paused; }
+
+/* ---- Soft pulse for live dots ---- */
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.pulse { animation: pulse 2.2s var(--ease-out) infinite; }
+
+/* ============================================================
+   Respect reduced motion: collapse to a calm fade, kill physics
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  [data-reveal] { opacity: 1 !important; transform: none !important; filter: none !important; }
+  .line-rise > span { transform: none !important; }
+  .orb { animation: none; }
+  .tilt { transform: none !important; }
+  .marquee { animation: none; }
+  .flow-sweep::after, [data-ambient] { animation: none !important; }
+  .cursor-dot, .cursor-ring { display: none !important; }
+}

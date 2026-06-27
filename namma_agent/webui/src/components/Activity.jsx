@@ -18,6 +18,9 @@ const VERBS = {
   calendar_agenda: "Checked the calendar", calendar_create_event: "Created an event",
   recall_facts: "Recalled memory", remember_fact: "Saved a memory", read_memory: "Read memory",
   recall_sessions: "Searched past chats",
+  // Cognee semantic/graph memory (MCP) — clean labels for the demo.
+  mcp_cognee_recall: "Recalled from Cognee memory", mcp_cognee_remember: "Saved to Cognee memory",
+  mcp_cognee_forget: "Forgot from Cognee memory",
   use_skill: "Used a skill", list_skills: "Listed skills",
   delegate_task: "Delegated a subtask",
   add_task: "Added a task", list_tasks: "Listed tasks", complete_task: "Completed a task",

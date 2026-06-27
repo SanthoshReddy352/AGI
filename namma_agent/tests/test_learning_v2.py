@@ -352,6 +352,48 @@ def test_mark_module_complete_saves_recap_and_notifies(db, topic):
     assert "doorman" in block
 
 
+class FakeIngestor:
+    """Captures what the learning tools push toward the Cognee graph."""
+    def __init__(self):
+        self.learning = []
+
+    def ingest_learning(self, text):
+        self.learning.append(text)
+
+
+def test_mark_module_complete_grows_cognee_graph(db, topic):
+    ing = FakeIngestor()
+    registry = ToolRegistry()
+    register_learning_tools(registry, db, config={},
+                            get_cognee_ingestor=lambda: ing)
+    set_current_session(_module_sid(db, topic, "m1"))
+    try:
+        res = registry.execute("mark_module_complete", {
+            "module_id": "m1", "recap": "Neurons fire when inputs cross a threshold."})
+        assert res.ok
+    finally:
+        set_current_session(None)
+
+    # The recap reached Cognee with topic + module context for good entities.
+    assert ing.learning, "completed module should push a recap into the graph"
+    pushed = ing.learning[0]
+    assert "What is a neuron" in pushed        # module title
+    assert "threshold" in pushed               # the recap itself
+    assert topic["title"] in pushed            # topic for cross-linking
+
+
+def test_mark_module_complete_without_cognee_is_fine(db, topic):
+    """No ingestor wired (Cognee not set up) → completion still works, no error."""
+    registry = ToolRegistry()
+    register_learning_tools(registry, db)  # get_cognee_ingestor defaults to None
+    set_current_session(_module_sid(db, topic, "m1"))
+    try:
+        res = registry.execute("mark_module_complete", {"module_id": "m1", "recap": "ok"})
+        assert res.ok
+    finally:
+        set_current_session(None)
+
+
 def test_progress_notification_can_be_disabled(db, topic):
     comms = FakeComms()
     registry = ToolRegistry()

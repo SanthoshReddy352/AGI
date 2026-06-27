@@ -13,13 +13,65 @@ matching response id.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
+import sys
 import threading
 from typing import Optional
 
 from namma_agent.core.logger import logger
 
 _PROTOCOL_VERSION = "2024-11-05"
+
+
+def _docker_container_name(command: list[str]) -> str:
+    """If ``command`` is a ``docker run … --name X …`` invocation, return X — so the
+    client can force-remove a stale/orphaned container of that name. ``docker run
+    --rm`` containers do NOT die when the parent process is killed (only when the
+    container's own stdio closes cleanly), so without this they leak and, for a
+    file-locked store like Kuzu, hold the lock → the next launch can't start until a
+    full app restart. Naming + ``docker rm -f`` makes reconnect/switch reliable."""
+    if not command:
+        return ""
+    head = os.path.basename(str(command[0])).lower()
+    if "docker" not in head:
+        return ""
+    for i, tok in enumerate(command):
+        if tok == "--name" and i + 1 < len(command):
+            return str(command[i + 1])
+    return ""
+
+
+def _docker_rm(name: str) -> None:
+    """Best-effort ``docker rm -f <name>`` (force-stop + remove). Silent on any error
+    (Docker down, no such container, …) — it only ever clears leftovers."""
+    if not name:
+        return
+    try:
+        subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=20)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _resolve_cmd(cmd: str) -> str:
+    """Resolve a command name to a full path, especially on Windows where
+    ``subprocess.Popen`` with ``shell=False`` can't resolve ``.cmd`` files
+    (e.g. ``npx`` → ``npx.cmd``) without the full path."""
+    # Already a full path or has an extension — return as-is
+    if os.path.isabs(cmd) or os.path.splitext(cmd)[1]:
+        return cmd
+    resolved = shutil.which(cmd)
+    if resolved:
+        return resolved
+    # On Windows, try with common extensions
+    if sys.platform == "win32":
+        for ext in [".cmd", ".bat", ".exe", ".ps1"]:
+            resolved = shutil.which(cmd + ext)
+            if resolved:
+                return resolved
+    return cmd
 
 
 class StdioMCPClient:
@@ -33,18 +85,33 @@ class StdioMCPClient:
         self._tools: list[dict] = []
         self._id = 0
         self._lock = threading.Lock()
+        self._docker_name = _docker_container_name(command)
 
     # -- lifecycle ---------------------------------------------------------
 
     def connect(self, timeout: int = 15) -> bool:
+        # Resolve the executable on Windows (npx → npx.cmd full path)
+        resolved = self.command[:]
+        if resolved:
+            resolved[0] = _resolve_cmd(resolved[0])
+
+        # Clear any orphaned container of the same name first, so a `--name` launch
+        # can't fail with "container name already in use" (e.g. after a hard kill).
+        _docker_rm(self._docker_name)
+
+        # Build env: inherit parent if none explicitly set
+        env = self._env
+        if env is None:
+            env = os.environ.copy()
+
         try:
             self._proc = subprocess.Popen(
-                self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                resolved, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
-                errors="replace", bufsize=1, env=self._env, cwd=self._cwd,
+                errors="replace", bufsize=1, env=env, cwd=self._cwd,
             )
         except (FileNotFoundError, OSError) as exc:
-            logger.warning("[mcp] %s: spawn failed: %s", self.name, exc)
+            logger.warning("[mcp] %s: spawn failed (%s): %s", self.name, resolved[0], exc)
             return False
         try:
             self._request("initialize", {
@@ -63,22 +130,31 @@ class StdioMCPClient:
             return False
 
     def close(self) -> None:
-        if self._proc is None:
-            return
-        try:
-            self._proc.terminate()
-            self._proc.wait(timeout=3)
-        except Exception:  # noqa: BLE001
+        proc, self._proc = self._proc, None
+        if proc is not None:
             try:
-                self._proc.kill()
+                proc.terminate()
+                proc.wait(timeout=3)
             except Exception:  # noqa: BLE001
-                pass
-        self._proc = None
+                try:
+                    proc.kill()
+                except Exception:  # noqa: BLE001
+                    pass
+        # A Dockerised server's container can outlive the client process — force-remove
+        # it so reconnecting/switching backends doesn't leave a lock-holding orphan.
+        _docker_rm(self._docker_name)
 
     # -- API ---------------------------------------------------------------
 
     def list_tools(self) -> list[dict]:
         return self._tools
+
+    def call_tool_raw(self, tool_name: str, arguments: dict, timeout: int = 60) -> dict:
+        """Like :meth:`call_tool` but returns the FULL result dict — needed when a
+        tool puts its payload in ``structuredContent`` (e.g. cognee's
+        ``visualize_graph_ui`` returns the graph HTML there, not in ``content``)."""
+        return self._request("tools/call", {"name": tool_name, "arguments": arguments or {}},
+                             timeout=timeout) or {}
 
     def call_tool(self, tool_name: str, arguments: dict, timeout: int = 60) -> str:
         result = self._request("tools/call", {"name": tool_name, "arguments": arguments or {}},

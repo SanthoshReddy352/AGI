@@ -1,0 +1,153 @@
+/* ============================================================
+   VELLUM — Design Tokens
+   The single source of truth, in CSS custom properties.
+   Everything else reads from here. Edit once, change everywhere.
+   ============================================================ */
+
+:root {
+  /* ---- Colour: warm neutrals, one Ember accent (light) ---- */
+  --canvas:          #F7F4EF;
+  --surface:         #FFFEFB;
+  --surface-sunken:  #F1ECE3;
+  --ink:             #211C18;
+  --ink-muted:       #75695E;
+  --ink-faint:       #A89C8E;
+  --line:            #E7E0D6;
+  --line-strong:     #D8CFC1;
+
+  --accent:          #DF4B2A;
+  --accent-press:    #C13C1F;
+  --accent-tint:     #FBE9E2;
+  --accent-ink:      #FFFEFB;   /* text on accent */
+
+  --pine:            #1F5D4C;
+  --pine-tint:       #E3EEEA;
+
+  /* shadow ink (warm, for layered elevation) */
+  --shadow-ink: 33, 28, 24;
+
+  /* ---- Typography ---- */
+  --font-display: "Clash Display", "Satoshi", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body:    "Satoshi", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "Space Mono", ui-monospace, "SFMono-Regular", "Cascadia Code", monospace;
+
+  --fs-display: clamp(3rem, 7vw, 5.5rem);
+  --fs-h1:      clamp(2.25rem, 4vw, 3.25rem);
+  --fs-h2:      1.75rem;
+  --fs-h3:      1.25rem;
+  --fs-body-lg: 1.125rem;
+  --fs-body:    1rem;
+  --fs-small:   0.875rem;
+  --fs-micro:   0.75rem;
+
+  --lh-tight:   1.08;
+  --lh-snug:    1.25;
+  --lh-body:    1.6;
+
+  --tracking-tight: -0.02em;
+  --tracking-eyebrow: 0.18em;
+
+  /* ---- Spacing rhythm (4px base) ---- */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  24px;
+  --s-6:  32px;
+  --s-7:  48px;
+  --s-8:  64px;
+  --s-9:  96px;
+  --s-10: 128px;
+
+  --max-content: 1120px;
+  --max-prose:   66ch;
+  --gutter: clamp(20px, 5vw, 48px);
+  --section-y: clamp(96px, 12vh, 160px);
+
+  /* ---- Shape ---- */
+  --r-sm:  10px;
+  --r-md:  16px;
+  --r-lg:  22px;
+  --r-xl:  28px;
+  --r-pill: 999px;
+
+  /* ---- Elevation (warm, layered, soft) ---- */
+  --e1: 0 1px 2px rgba(var(--shadow-ink), .04), 0 1px 1px rgba(var(--shadow-ink), .03);
+  --e2: 0 4px 16px -4px rgba(var(--shadow-ink), .10), 0 2px 4px rgba(var(--shadow-ink), .04);
+  --e3: 0 18px 48px -12px rgba(var(--shadow-ink), .18), 0 6px 16px rgba(var(--shadow-ink), .06);
+
+  /* ---- Motion ---- */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in:     cubic-bezier(0.4, 0, 1, 1);
+
+  --t-fast:   150ms;
+  --t-base:   260ms;
+  --t-slow:   460ms;
+  --t-reveal: 720ms;
+
+  --ring: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent);
+
+  /* ---- Semantic spacing & padding (premium rhythm) ----
+     Generous, deliberate, never uniform. Padding scales up with surface
+     importance: chips small, cards medium, hero/sections large.        */
+  --pad-chip:    10px 14px;
+  --pad-control: 12px 16px;        /* inputs, small surfaces           */
+  --pad-card:    clamp(22px, 2.4vw, 32px);    /* default card padding  */
+  --pad-card-lg: clamp(28px, 3.2vw, 44px);    /* feature / hero cards  */
+  --pad-panel:   clamp(20px, 2vw, 28px);
+  --gap-tight:   var(--s-3);       /* 12 - inside a control cluster    */
+  --gap:         var(--s-5);       /* 24 - default between siblings    */
+  --gap-grid:    clamp(20px, 2vw, 28px);      /* between grid cells     */
+  --gap-col:     clamp(28px, 3.4vw, 56px);    /* between layout columns */
+  --stack-flow:  var(--s-5);       /* vertical rhythm in a stack       */
+
+  /* ---- Section rhythm ---- */
+  --section-y-sm: clamp(72px, 9vh, 112px);
+  --section-y-lg: clamp(120px, 15vh, 200px);
+
+  /* ---- Premium box-shadow ladder (warm, layered) ----
+     e1 hairline lift · e2 resting card · e3 floating · e4 modal/overlay */
+  --e4: 0 32px 80px -20px rgba(var(--shadow-ink), .26), 0 12px 28px rgba(var(--shadow-ink), .10);
+  --e-accent: 0 12px 28px -10px rgba(223, 75, 42, .45);
+
+  /* ---- Cursor (highlighter dot) ---- */
+  --cursor-size: 7px;             /* tiny square pixel at the tip       */
+  --cursor-ring: 30px;            /* lagging outline                    */
+
+  /* ---- Pixel accent ---- */
+  --pixel: 4px;                   /* unit square for pixel motifs       */
+  --pixel-color: color-mix(in srgb, var(--ink) 12%, transparent);
+
+  /* ---- Scrollbar ---- */
+  --sb-size: 12px;
+  --sb-thumb: var(--line-strong);
+  --sb-thumb-hover: var(--accent);
+}
+
+/* ---- Dark theme: tuned, warm, never pure black ---- */
+[data-theme="dark"] {
+  --canvas:          #16130F;
+  --surface:         #1F1B16;
+  --surface-sunken:  #120F0B;
+  --ink:             #F4EFE7;
+  --ink-muted:       #A99C8E;
+  --ink-faint:       #6E6155;
+  --line:            #332C24;
+  --line-strong:     #463C30;
+
+  --accent:          #FF6A47;
+  --accent-press:    #E2543A;
+  --accent-tint:     #3A211A;
+  --accent-ink:      #16130F;
+
+  --pine:            #5FB89E;
+  --pine-tint:       #1B2C27;
+
+  --shadow-ink: 0, 0, 0;
+  --e1: 0 1px 2px rgba(0,0,0,.30);
+  --e2: 0 6px 20px -6px rgba(0,0,0,.50), 0 2px 6px rgba(0,0,0,.30);
+  --e3: 0 24px 56px -16px rgba(0,0,0,.65), 0 8px 20px rgba(0,0,0,.40);
+
+  --ring: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent);
+}

@@ -69,6 +69,37 @@ class SettingsBody(BaseModel):
     env: dict = {}      # written to .env (e.g. API keys)
 
 
+class McpServerToggleBody(BaseModel):
+    name: str
+    enabled: bool = True
+
+
+class MemoryRecallBody(BaseModel):
+    query: str = ""
+    top_k: int = 8
+
+
+class MemoryRememberBody(BaseModel):
+    text: str = ""
+    permanent: bool = True   # False = fast session memory (no graph build)
+
+
+class MemoryForgetBody(BaseModel):
+    dataset: str = ""
+    everything: bool = False
+
+
+class CogneeSettingsBody(BaseModel):
+    env: dict = {}     # LLM_*/EMBEDDING_* values for .env.cognee (LLM_API_KEY optional)
+    flags: dict = {}   # auto_ingest, ingest_replies
+
+
+class CogneeRegisterBody(BaseModel):
+    mode: str = "local"     # "local" (Track A, self-hosted) | "cloud" (Track B, Cognee Cloud)
+    serve_url: str = ""     # cloud only: https://<instance>.cognee.ai
+    api_key: str = ""       # cloud only: written to .env.cognee.cloud (kept out of config)
+
+
 class MemoryClearBody(BaseModel):
     scope: str = "all"  # facts | conversations | notes | all
 
@@ -926,6 +957,70 @@ def create_app(service: Optional[NammaAgentService] = None) -> FastAPI:
     def mcp_reload():
         """Reconnect MCP servers from the saved config (no restart) and return state."""
         return service.reload_mcp()
+
+    @app.post("/api/mcp/server/toggle")
+    def mcp_server_toggle(body: McpServerToggleBody):
+        """Enable/disable an entire MCP server (persists + reconnects)."""
+        return service.set_mcp_server_enabled(body.name, body.enabled)
+
+    # -- Cognee memory (Settings-independent Memory tab) --------------------
+
+    @app.get("/api/memory/status")
+    def memory_status():
+        """Is Cognee memory connected (drives the Memory tab's availability)."""
+        return service.memory_status()
+
+    @app.post("/api/memory/recall")
+    def memory_recall(body: MemoryRecallBody):
+        """Ask Cognee memory a question — semantic + graph recall."""
+        return service.cognee_tool("recall", {"query": body.query, "top_k": body.top_k}, timeout=180)
+
+    @app.post("/api/memory/remember")
+    def memory_remember(body: MemoryRememberBody):
+        """Store text into Cognee. permanent=True builds the graph (cognify, slower);
+        permanent=False is fast session memory (buffered for later consolidation)."""
+        return service.cognee_remember(body.text, body.permanent)
+
+    @app.post("/api/memory/consolidate")
+    def memory_consolidate():
+        """The 'improve' op — promote buffered session memories into the permanent
+        knowledge graph via cognify (entity extraction + linking)."""
+        return service.cognee_consolidate()
+
+    @app.post("/api/memory/compare")
+    def memory_compare(body: MemoryRecallBody):
+        """The before/after money shot — keyword (SQLite FTS5) vs Cognee semantic recall
+        for the same query."""
+        return service.memory_compare(body.query)
+
+    @app.post("/api/memory/forget")
+    def memory_forget(body: MemoryForgetBody):
+        """Delete a dataset, or everything, from Cognee memory."""
+        args = {"everything": True} if body.everything else {"dataset": body.dataset}
+        return service.cognee_tool("forget", args, timeout=120)
+
+    @app.get("/api/memory/graph")
+    def memory_graph():
+        """The knowledge graph as {nodes, edges} for the Memory tab's graph view."""
+        return service.memory_graph()
+
+    # -- Cognee settings (Settings → Memory → Cognee) ----------------------
+
+    @app.get("/api/cognee/config")
+    def cognee_config():
+        """Cognee status + editable model/embedding env + behaviour flags."""
+        return service.cognee_settings()
+
+    @app.post("/api/cognee/config")
+    def cognee_config_save(body: CogneeSettingsBody):
+        """Persist Cognee model/embedding env + flags from the UI (reconnects if env changed)."""
+        return service.save_cognee_settings(body.env, body.flags)
+
+    @app.post("/api/cognee/register")
+    def cognee_register(body: CogneeRegisterBody = CogneeRegisterBody()):
+        """One-click: register + connect the cognee MCP server for the chosen track
+        (local self-hosted, or Cognee Cloud via --serve-url + key)."""
+        return service.register_cognee_server(body.mode, body.serve_url, body.api_key)
 
     @app.get("/api/comms/status")
     def comms_status():

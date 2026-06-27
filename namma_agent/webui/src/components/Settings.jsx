@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { applyUpdate, checkUpdate, clearMemory, deletePersona, exportPack, fetchCommsStatus, fetchConfiguredModels, fetchConfiguredProviders, fetchEnvStatus, fetchMcp, fetchModels, fetchModelsForProvider, fetchPackItems, fetchPersona, fetchPersonas, fetchProviders, fetchSettings, fetchVersion, generatePersona, inspectPack, installPack, listSkills, listTools, packDownloadUrl, reloadMcp, savePersona, saveConfiguredModels, saveConfiguredProviders, saveSettings, setPersona, startComms, stopComms, toggleSkill, toggleTool, toggleToolset, uninstallApp } from "../api.js";
+import { applyUpdate, checkUpdate, clearMemory, deletePersona, exportPack, fetchCogneeConfig, fetchCommsStatus, fetchConfiguredModels, fetchConfiguredProviders, fetchEnvStatus, fetchMcp, fetchModels, fetchModelsForProvider, fetchPackItems, fetchPersona, fetchPersonas, fetchProviders, fetchSettings, fetchVersion, generatePersona, inspectPack, installPack, listSkills, listTools, memoryForget, packDownloadUrl, registerCogneeServer, reloadMcp, savePersona, saveCogneeConfig, saveConfiguredModels, saveConfiguredProviders, saveSettings, setPersona, startComms, stopComms, toggleMcpServer, toggleSkill, toggleTool, toggleToolset, uninstallApp } from "../api.js";
 import { COMPLETION_PRESETS, SOUND_EVENTS, completionPreset, previewPreset, setCompletionPreset, setSoundEventEnabled, setSoundVolume, setSoundsEnabled, soundEventEnabled, soundVolume, soundsEnabled } from "../sounds.js";
 import { NOTIFY_EVENTS, notifyEnabled, notifyEventEnabled, sendTestNotification, setNotifyEnabled, setNotifyEventEnabled } from "../notify.js";
 
@@ -39,7 +39,7 @@ const TAB_GROUPS = [
   { label: "Intelligence", tabs: ["Providers", "Models"] },
   { label: "Capabilities", tabs: ["Skills", "Toolsets", "Packs", "Browser"] },
   { label: "Channels", tabs: ["Messaging"] },
-  { label: "MCP", tabs: ["Config", "Servers"] },
+  { label: "MCP", tabs: ["Config", "Servers", "Cognee"] },
   { label: "System", tabs: ["Memory", "About"] },
 ];
 const TABS = TAB_GROUPS.flatMap((g) => g.tabs);
@@ -59,6 +59,7 @@ const TAB_ICONS = {
   Messaging: "M4 5h16v11H8l-4 4z",
   Config: "M10.3 4.3l-.7 2.1-2.1.8-2-1-1.5 1.5 1 2-.8 2.1-2.1.7v2.1l2.1.7.8 2.1-1 2 1.5 1.5 2-1 2.1.8.7 2.1h2.1l.7-2.1 2.1-.8 2 1 1.5-1.5-1-2 .8-2.1 2.1-.7v-2.1l-2.1-.7-.8-2.1 1-2-1.5-1.5-2 1-2.1-.8-.7-2.1zM12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z",
   Servers: "M4 5h16v5H4zM4 14h16v5H4zM7 7.5h.01M7 16.5h.01",
+  Cognee: "M12 3a3 3 0 013 3 3 3 0 01.8 5.9A3 3 0 0115 18a3 3 0 01-6 0 3 3 0 01-.8-6.1A3 3 0 019 6a3 3 0 013-3zM12 8v3m0 0l-2.5 1.5M12 11l2.5 1.5",
   Memory: "M4 7a8 4 0 0016 0 8 4 0 00-16 0v10a8 4 0 0016 0M4 12a8 4 0 0016 0",
   About: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 11v5M12 7.5h.01",
 };
@@ -339,6 +340,8 @@ export default function Settings({ onClose, theme, onThemeToggle, themeName, onT
                 {tab === "Config" && <McpConfigTab />}
 
                 {tab === "Servers" && <McpServersTab />}
+
+                {tab === "Cognee" && <CogneeTab />}
 
                 {tab === "Skills" && <SkillsTab />}
 
@@ -1018,9 +1021,37 @@ function SkillBadge({ children, tone = "muted" }) {
   return <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${tones[tone]}`}>{children}</span>;
 }
 
+// A right-pointing chevron that rotates down when its group is open.
+function Chevron({ open }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+         className={`shrink-0 transition-transform ${open ? "rotate-90" : ""}`}>
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+// A clickable group header (chevron + label + count + optional right-side action)
+// used to collapse/expand long lists (Skills, Toolsets, MCP server tools).
+function GroupHeader({ open, onToggle, label, count, right, mono }) {
+  return (
+    <div className="flex items-center justify-between mb-2">
+      <button type="button" onClick={onToggle}
+              className="flex items-center gap-1.5 text-[12px] uppercase tracking-wide text-ink-faint dark:text-night-faint hover:text-ink dark:hover:text-night-ink">
+        <Chevron open={open} />
+        <span className={mono ? "font-mono normal-case" : ""}>{label}</span>
+        {count != null && <span className="opacity-60">({count})</span>}
+      </button>
+      {right}
+    </div>
+  );
+}
+
 function SkillsTab() {
   const [skills, setSkills] = useState(null);
   const [q, setQ] = useState("");
+  const [open, setOpen] = useState({});    // category -> expanded
   const [busy, setBusy] = useState({});   // name -> true while its toggle is in flight
 
   useEffect(() => { listSkills().then((r) => setSkills(r?.skills || [])); }, []);
@@ -1056,11 +1087,13 @@ function SkillsTab() {
 
       {cats.length === 0 && <div className="text-ink-faint dark:text-night-faint text-[13px]">No skills match “{q}”.</div>}
 
-      {cats.map((cat) => (
+      {cats.map((cat) => {
+        const isOpen = open[cat] ?? !!needle;   // auto-expand while searching
+        return (
         <div key={cat}>
-          <div className="text-[12px] uppercase tracking-wide text-ink-faint dark:text-night-faint mb-2">
-            {cat} <span className="opacity-60">({byCat[cat].length})</span>
-          </div>
+          <GroupHeader open={isOpen} onToggle={() => setOpen((o) => ({ ...o, [cat]: !isOpen }))}
+                       label={cat} count={byCat[cat].length} />
+          {isOpen && (
           <div className="space-y-1.5">
             {byCat[cat].map((s) => (
               <div key={s.name} className={`${_box} flex items-start justify-between gap-3`}>
@@ -1086,8 +1119,10 @@ function SkillsTab() {
               </div>
             ))}
           </div>
+          )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1099,6 +1134,7 @@ function SkillsTab() {
 function ToolsetsTab() {
   const [tools, setTools] = useState(null);
   const [q, setQ] = useState("");
+  const [open, setOpen] = useState({});    // category -> expanded
   const [busy, setBusy] = useState({});   // name|cat -> true while a toggle is in flight
 
   useEffect(() => { listTools().then((r) => setTools(r?.tools || [])); }, []);
@@ -1152,17 +1188,17 @@ function ToolsetsTab() {
       {cats.map((cat) => {
         const items = byCat[cat];
         const allOn = items.every((t) => t.enabled);
+        const isOpen = open[cat] ?? !!needle;   // auto-expand while searching
         return (
           <div key={cat}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-[12px] uppercase tracking-wide text-ink-faint dark:text-night-faint">
-                {cat} <span className="opacity-60">({items.length})</span>
-              </div>
-              <button type="button" disabled={!!busy[`cat:${cat}`]} onClick={() => flipCat(cat, items)}
-                      className="text-[11.5px] text-ink-faint dark:text-night-faint hover:text-brand disabled:opacity-50">
-                {allOn ? "Disable all" : "Enable all"}
-              </button>
-            </div>
+            <GroupHeader open={isOpen} onToggle={() => setOpen((o) => ({ ...o, [cat]: !isOpen }))}
+                         label={cat} count={items.length}
+                         right={
+                           <button type="button" disabled={!!busy[`cat:${cat}`]} onClick={() => flipCat(cat, items)}
+                                   className="text-[11.5px] text-ink-faint dark:text-night-faint hover:text-brand disabled:opacity-50">
+                             {allOn ? "Disable all" : "Enable all"}
+                           </button>} />
+            {isOpen && (
             <div className="space-y-1.5">
               {items.map((t) => (
                 <div key={t.name} className={`${_box} flex items-start justify-between gap-3`}>
@@ -1182,6 +1218,7 @@ function ToolsetsTab() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         );
       })}
@@ -1269,6 +1306,8 @@ function McpConfigTab() {
 function McpServersTab() {
   const [data, setData] = useState(null);   // {servers:[...]}
   const [busy, setBusy] = useState({});     // tool name -> in-flight
+  const [srvBusy, setSrvBusy] = useState({}); // server name -> in-flight (whole-server toggle)
+  const [open, setOpen] = useState({});     // server name -> tools expanded
   const [reloading, setReloading] = useState(false);
 
   const load = () => fetchMcp().then((r) => setData(r || { servers: [] }));
@@ -1286,6 +1325,16 @@ function McpServersTab() {
     setBusy((b) => ({ ...b, [t.name]: false }));
   }
 
+  // Turn an ENTIRE server on/off: persists its `enabled` flag and reconnects, so a
+  // disabled server isn't launched at all (vs per-tool toggles above).
+  async function flipServer(s) {
+    const next = s.enabled === false;   // currently off → turn on
+    setSrvBusy((b) => ({ ...b, [s.name]: true }));
+    const r = await toggleMcpServer(s.name, next);
+    if (r && r.servers) setData(r); else await load();
+    setSrvBusy((b) => ({ ...b, [s.name]: false }));
+  }
+
   async function reload() {
     setReloading(true);
     const r = await reloadMcp();
@@ -1299,7 +1348,7 @@ function McpServersTab() {
   return (
     <div className="space-y-4">
       <Section title="MCP servers"
-               hint="Configured Model Context Protocol servers and the tools each exposes. Turn a tool off to keep it out of every turn. Add or edit servers in the Config tab.">
+               hint="Configured Model Context Protocol servers and the tools each exposes. Use the switch on a server to turn the whole server on/off; expand it to toggle individual tools. Add or edit servers in the Config tab.">
         <button onClick={reload} disabled={reloading} className={_btnGhost + " disabled:opacity-50 text-[13px]"}>
           {reloading ? "Reconnecting…" : "↻ Reconnect servers"}
         </button>
@@ -1311,47 +1360,291 @@ function McpServersTab() {
         </div>
       )}
 
-      {servers.map((s) => (
-        <div key={s.name}>
-          <div className="flex items-center gap-2 mb-2">
-            <span className={`h-2 w-2 rounded-full shrink-0 ${s.connected ? "bg-emerald-500" : "bg-amber-500"}`} />
-            <span className="font-medium text-[13.5px]">{s.name}</span>
-            <span className="text-[11px] text-ink-faint dark:text-night-faint">
-              {s.connected ? `${s.tools.length} tool${s.tools.length === 1 ? "" : "s"}` : "not connected"}
-            </span>
-            {s.enabled === false && <SkillBadge>disabled in config</SkillBadge>}
+      {servers.map((s) => {
+        const serverOn = s.enabled !== false;
+        const isOpen = open[s.name] ?? false;
+        const flipping = !!srvBusy[s.name];
+        return (
+        <div key={s.name} className={`${_box} ${serverOn ? "" : "opacity-70"}`}>
+          {/* server header: chevron + status + name + count  ·····  whole-server switch */}
+          <div className="flex items-center justify-between gap-3">
+            <button type="button" onClick={() => setOpen((o) => ({ ...o, [s.name]: !isOpen }))}
+                    className="flex items-center gap-2 min-w-0 text-left hover:opacity-80">
+              <Chevron open={isOpen} />
+              <span className={`h-2 w-2 rounded-full shrink-0 ${s.connected ? "bg-emerald-500" : serverOn ? "bg-amber-500" : "bg-line dark:bg-night-line"}`} />
+              <span className="font-medium text-[13.5px] truncate">{s.name}</span>
+              <span className="text-[11px] text-ink-faint dark:text-night-faint shrink-0">
+                {flipping ? "applying…" : s.connected ? `${s.tools.length} tool${s.tools.length === 1 ? "" : "s"}` : serverOn ? "not connected" : "off"}
+              </span>
+            </button>
+            <button type="button" disabled={flipping} title={serverOn ? "Turn server off" : "Turn server on"}
+                    onClick={() => flipServer(s)}
+                    className={`h-6 w-11 rounded-full transition relative shrink-0 disabled:opacity-50 ${serverOn ? "bg-brand" : "bg-line dark:bg-night-line"}`}>
+              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${serverOn ? "left-[22px]" : "left-0.5"}`} />
+            </button>
           </div>
-          {s.command?.length > 0 && (
-            <div className="text-[11px] font-mono text-ink-faint dark:text-night-faint mb-2 truncate">
-              {s.command.join(" ")}
-            </div>
-          )}
-          {!s.connected ? (
-            <div className="text-[12px] text-ink-faint dark:text-night-faint">
-              Couldn't connect — check the command in the Config tab, then Reconnect.
-            </div>
-          ) : s.tools.length === 0 ? (
-            <div className="text-[12px] text-ink-faint dark:text-night-faint">Server exposes no tools.</div>
-          ) : (
-            <div className="space-y-1.5">
-              {s.tools.map((t) => (
-                <div key={t.name} className={`${_box} flex items-start justify-between gap-3`}>
-                  <div className="min-w-0">
-                    <span className="font-medium font-mono text-[13px]">{t.tool}</span>
-                    {t.description && (
-                      <div className="text-[12.5px] text-ink-faint dark:text-night-faint mt-0.5">{t.description}</div>
-                    )}
-                  </div>
-                  <button type="button" disabled={!!busy[t.name]} onClick={() => flip(s.name, t)}
-                          className={`h-6 w-11 rounded-full transition relative shrink-0 mt-0.5 disabled:opacity-50 ${t.enabled ? "bg-brand" : "bg-line dark:bg-night-line"}`}>
-                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${t.enabled ? "left-[22px]" : "left-0.5"}`} />
-                  </button>
+
+          {isOpen && (
+            <div className="mt-2.5">
+              {s.command?.length > 0 && (
+                <div className="text-[11px] font-mono text-ink-faint dark:text-night-faint mb-2 break-all">
+                  {s.command.join(" ")}
                 </div>
-              ))}
+              )}
+              {!serverOn ? (
+                <div className="text-[12px] text-ink-faint dark:text-night-faint">Server is off — turn it on to connect and load its tools.</div>
+              ) : !s.connected ? (
+                <div className="text-[12px] text-ink-faint dark:text-night-faint">
+                  Couldn't connect — check the command in the Config tab, then Reconnect.
+                </div>
+              ) : s.tools.length === 0 ? (
+                <div className="text-[12px] text-ink-faint dark:text-night-faint">Server exposes no tools.</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {s.tools.map((t) => (
+                    <div key={t.name} className="rounded-lg border border-line dark:border-night-line p-2.5 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="font-medium font-mono text-[13px]">{t.tool}</span>
+                        {t.description && (
+                          <div className="text-[12.5px] text-ink-faint dark:text-night-faint mt-0.5">{t.description}</div>
+                        )}
+                      </div>
+                      <button type="button" disabled={!!busy[t.name]} onClick={() => flip(s.name, t)}
+                              className={`h-6 w-11 rounded-full transition relative shrink-0 mt-0.5 disabled:opacity-50 ${t.enabled ? "bg-brand" : "bg-line dark:bg-night-line"}`}>
+                        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${t.enabled ? "left-[22px]" : "left-0.5"}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
+    </div>
+  );
+}
+
+// The "MCP → Cognee" tab: configure the whole Cognee memory integration from the
+// UI — connection/server, models & embeddings (.env.cognee), behaviour flags
+// (config), and a danger zone. No file editing needed.
+const COGNEE_PRESETS = {
+  "Hybrid (Groq + local Ollama)": {
+    LLM_PROVIDER: "custom", LLM_MODEL: "groq/llama-3.3-70b-versatile",
+    LLM_ENDPOINT: "https://api.groq.com/openai/v1",
+    EMBEDDING_PROVIDER: "ollama", EMBEDDING_MODEL: "nomic-embed-text",
+    EMBEDDING_ENDPOINT: "http://namma-cognee-ollama:11434/api/embed",
+    EMBEDDING_DIMENSIONS: "768", HUGGINGFACE_TOKENIZER: "nomic-ai/nomic-embed-text-v1.5",
+  },
+  "Fully local (Ollama)": {
+    LLM_PROVIDER: "ollama", LLM_MODEL: "qwen2.5:7b",
+    LLM_ENDPOINT: "http://namma-cognee-ollama:11434/v1",
+    EMBEDDING_PROVIDER: "ollama", EMBEDDING_MODEL: "nomic-embed-text",
+    EMBEDDING_ENDPOINT: "http://namma-cognee-ollama:11434/api/embed",
+    EMBEDDING_DIMENSIONS: "768", HUGGINGFACE_TOKENIZER: "nomic-ai/nomic-embed-text-v1.5",
+  },
+  "OpenAI": {
+    LLM_PROVIDER: "openai", LLM_MODEL: "openai/gpt-4o-mini", LLM_ENDPOINT: "",
+    EMBEDDING_PROVIDER: "openai", EMBEDDING_MODEL: "openai/text-embedding-3-small",
+    EMBEDDING_ENDPOINT: "", EMBEDDING_DIMENSIONS: "1536", HUGGINGFACE_TOKENIZER: "",
+  },
+};
+const LLM_PROVIDERS = ["custom", "openai", "ollama", "anthropic", "gemini", "mistral", "azure", "bedrock", "llama_cpp"];
+const EMB_PROVIDERS = ["ollama", "openai", "fastembed", "custom"];
+
+function CogneeTab() {
+  const [cfg, setCfg] = useState(null);   // server snapshot
+  const [env, setEnvState] = useState({});
+  const [key, setKey] = useState("");     // new LLM_API_KEY (write-only)
+  const [flags, setFlags] = useState({ auto_ingest: false, ingest_replies: false, ingest_learning: true, recall_context: false });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);   // {ok, text}
+  const [confirm, setConfirm] = useState(false);
+  const [track, setTrack] = useState("local");   // which backend the user is choosing
+  const [serveUrl, setServeUrl] = useState("");   // cloud instance URL
+  const [cloudKey, setCloudKey] = useState("");   // new cloud API key (write-only)
+
+  const load = () => fetchCogneeConfig().then((r) => {
+    if (!r) return;
+    setCfg(r); setEnvState(r.env || {});
+    setFlags({ auto_ingest: !!r.auto_ingest, ingest_replies: !!r.ingest_replies, ingest_learning: r.ingest_learning !== false, recall_context: !!r.recall_context });
+    setTrack(r.mode || "local"); setServeUrl(r.serve_url || "");
+  });
+  useEffect(() => { load(); }, []);
+
+  const setE = (k, v) => setEnvState((e) => ({ ...e, [k]: v }));
+  const applyPreset = (name) => setEnvState((e) => ({ ...e, ...COGNEE_PRESETS[name] }));
+
+  async function saveModels() {
+    setBusy(true); setMsg(null);
+    const out = { ...env };
+    if (key.trim()) out.LLM_API_KEY = key.trim();
+    const r = await saveCogneeConfig(out, {});
+    setBusy(false);
+    if (r?.ok) { setCfg(r); setEnvState(r.env || env); setKey(""); setMsg({ ok: true, text: "Saved — reconnected with the new models." }); }
+    else setMsg({ ok: false, text: r?.error || "Couldn't save." });
+  }
+
+  async function flipFlag(k, v) {
+    setFlags((f) => ({ ...f, [k]: v }));
+    const r = await saveCogneeConfig({}, { [k]: v });   // flag-only = instant, no reconnect
+    if (r?.ok) setCfg(r);
+  }
+
+  async function reconnect() { setBusy(true); await reloadMcp(); await load(); setBusy(false); }
+  async function registerServer(body = { mode: "local" }) {
+    setBusy(true); setMsg(null);
+    const r = await registerCogneeServer(body);
+    setBusy(false);
+    if (r?.ok) { setCfg(r); setServeUrl(r.serve_url || ""); setCloudKey(""); setTrack(r.mode || "local"); setMsg({ ok: true, text: r.mode === "cloud" ? "Switched to Cognee Cloud — reconnecting." : "Self-hosted Cognee registered — reconnecting." }); }
+    else setMsg({ ok: false, text: r?.error || "Couldn't register the server." });
+  }
+  async function registerCloud() {
+    if (!serveUrl.trim()) { setMsg({ ok: false, text: "Enter your Cognee Cloud instance URL." }); return; }
+    await registerServer({ mode: "cloud", serve_url: serveUrl.trim(), api_key: cloudKey.trim() });
+  }
+  async function toggleServer() {
+    if (!cfg) return;
+    setBusy(true);
+    const r = await toggleMcpServer("cognee", !cfg.server_enabled);
+    setBusy(false); await load();
+  }
+  async function forgetAll() {
+    setConfirm(false); setBusy(true); setMsg(null);
+    const r = await memoryForget({ everything: true });
+    setBusy(false);
+    setMsg(r?.ok ? { ok: true, text: "Cognee memory cleared." } : { ok: false, text: r?.error || "Couldn't clear." });
+  }
+
+  if (!cfg) return <div className="text-ink-faint dark:text-night-faint">Loading…</div>;
+
+  return (
+    <div className="space-y-6">
+      {/* Connection / server */}
+      <Section title="Cognee memory" hint="Semantic + knowledge-graph memory via the Cognee MCP server. Configure it all here — no file editing.">
+        <div className={`${_box} flex items-center gap-3 flex-wrap`}>
+          <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${cfg.connected ? "bg-emerald-500" : "bg-amber-500"}`} />
+          <span className="text-[13.5px] font-medium">{cfg.connected ? "Connected" : "Not connected"}</span>
+          <span className="text-[12px] text-ink-faint dark:text-night-faint">
+            {cfg.server_present
+              ? `${cfg.mode === "cloud" ? "Cognee Cloud" : "self-hosted"} · ${cfg.server_enabled ? "server enabled" : "server disabled"}`
+              : "server not registered"}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {!cfg.server_present ? (
+              <button onClick={() => registerServer()} disabled={busy} className={_btn}>{busy ? "…" : "Register Cognee server"}</button>
+            ) : (
+              <>
+                <Toggle label="" checked={cfg.server_enabled} onChange={toggleServer} />
+                <button onClick={reconnect} disabled={busy} className={_btnGhost + " text-[13px] disabled:opacity-50"}>{busy ? "…" : "↻ Reconnect"}</button>
+              </>
+            )}
+          </div>
+        </div>
+        {!cfg.server_present && (
+          <div className="text-[12px] text-ink-faint dark:text-night-faint">
+            Needs Docker + the one-time setup (<span className="font-mono">scripts/setup_cognee.ps1</span>). See <span className="font-mono">docs/COGNEE.md</span>.
+          </div>
+        )}
+      </Section>
+
+      {/* Backend / track — Self-hosted (Track A) vs Cognee Cloud (Track B). Same
+          Memory tab + code either way; only this server entry differs. */}
+      <Section title="Backend" hint="Run Cognee yourself (open-source, on this machine) or against managed Cognee Cloud. The Memory tab works identically either way.">
+        <div className="flex gap-2">
+          {[["local", "Self-hosted", "Open-source · Ollama + Kuzu/LanceDB on this machine"],
+            ["cloud", "Cognee Cloud", "Managed · zero local infra"]].map(([m, label, sub]) => (
+            <button key={m} onClick={() => setTrack(m)}
+                    className={`flex-1 ${_box} text-left ${track === m ? "ring-2 ring-emerald-500/60" : ""}`}>
+              <div className="text-[13.5px] font-medium flex items-center gap-2">
+                {label}
+                {cfg.mode === m && cfg.server_present && <span className="text-[11px] text-emerald-600 dark:text-emerald-400">● active</span>}
+              </div>
+              <div className="text-[11.5px] text-ink-faint dark:text-night-faint">{sub}</div>
+            </button>
+          ))}
+        </div>
+
+        {track === "cloud" && (
+          <div className="space-y-2 mt-1">
+            <Field label="Instance URL"><Input value={serveUrl} onChange={setServeUrl}
+                   placeholder="https://your-instance.cognee.ai" /></Field>
+            <Field label={`API key${cfg.cloud_key_set ? " (saved — leave blank to keep)" : ""}`}>
+              <Input type="password" value={cloudKey} onChange={setCloudKey}
+                     placeholder={cfg.cloud_key_set ? "•••••• (set) — type to replace" : "from platform.cognee.ai"} />
+            </Field>
+            <div className="flex items-center gap-2">
+              <button onClick={registerCloud} disabled={busy} className={_btn}>
+                {busy ? "…" : (cfg.mode === "cloud" ? "Update cloud connection" : "Connect to Cognee Cloud")}
+              </button>
+              <span className="text-[11.5px] text-ink-faint dark:text-night-faint">Sign up at platform.cognee.ai (dev code <span className="font-mono">COGNEE-35</span>).</span>
+            </div>
+          </div>
+        )}
+        {track === "local" && cfg.mode === "cloud" && (
+          <div className="flex items-center gap-2 mt-1">
+            <button onClick={() => registerServer({ mode: "local" })} disabled={busy} className={_btn}>
+              {busy ? "…" : "Switch to self-hosted"}
+            </button>
+            <span className="text-[11.5px] text-ink-faint dark:text-night-faint">Uses the local <span className="font-mono">.env.cognee</span> + container.</span>
+          </div>
+        )}
+      </Section>
+
+      {/* Behavior */}
+      <Section title="Behaviour" hint="How Cognee is used during normal chat.">
+        <Toggle label="Auto-ingest chats — grow the knowledge graph from every turn (background)"
+                checked={flags.auto_ingest} onChange={(v) => flipFlag("auto_ingest", v)} />
+        <Toggle label="Also ingest the assistant's replies (not just your messages)"
+                checked={flags.ingest_replies} onChange={(v) => flipFlag("ingest_replies", v)} />
+        <Toggle label="Grow the graph from the Learning Room — push each completed module's recap into Cognee"
+                checked={flags.ingest_learning} onChange={(v) => flipFlag("ingest_learning", v)} />
+        <Toggle label="Recall in chat — auto-pull from Cognee on 'what do you know about me?' questions (else the model calls recall itself)"
+                checked={flags.recall_context} onChange={(v) => flipFlag("recall_context", v)} />
+      </Section>
+
+      {/* Models & embeddings */}
+      <Section title="Models & embeddings" hint="The LLM that extracts the graph + the embedding model for semantic search. Changing these reconnects the server (~20s).">
+        <div className="flex flex-wrap gap-2 mb-1">
+          {Object.keys(COGNEE_PRESETS).map((p) => (
+            <button key={p} onClick={() => applyPreset(p)} className={_btnGhost + " text-[12.5px]"}>{p}</button>
+          ))}
+        </div>
+        <div className="text-[11.5px] uppercase tracking-wide text-ink-faint dark:text-night-faint pt-1">Extraction LLM</div>
+        <Field label="Provider"><Select value={env.LLM_PROVIDER || "custom"} onChange={(v) => setE("LLM_PROVIDER", v)} options={LLM_PROVIDERS} /></Field>
+        <Field label="Model"><Input value={env.LLM_MODEL || ""} onChange={(v) => setE("LLM_MODEL", v)} placeholder="e.g. groq/llama-3.3-70b-versatile" /></Field>
+        <Field label="Endpoint"><Input value={env.LLM_ENDPOINT || ""} onChange={(v) => setE("LLM_ENDPOINT", v)} placeholder="e.g. https://api.groq.com/openai/v1" /></Field>
+        <Field label="API key"><Input type="password" value={key} onChange={setKey}
+               placeholder={cfg.llm_api_key_set ? "•••••• (set) — type to replace" : "paste the LLM API key"} /></Field>
+
+        <div className="text-[11.5px] uppercase tracking-wide text-ink-faint dark:text-night-faint pt-2">Embeddings</div>
+        <Field label="Provider"><Select value={env.EMBEDDING_PROVIDER || "ollama"} onChange={(v) => setE("EMBEDDING_PROVIDER", v)} options={EMB_PROVIDERS} /></Field>
+        <Field label="Model"><Input value={env.EMBEDDING_MODEL || ""} onChange={(v) => setE("EMBEDDING_MODEL", v)} placeholder="e.g. nomic-embed-text" /></Field>
+        <Field label="Endpoint"><Input value={env.EMBEDDING_ENDPOINT || ""} onChange={(v) => setE("EMBEDDING_ENDPOINT", v)} placeholder="e.g. http://namma-cognee-ollama:11434/api/embed" /></Field>
+        <Field label="Dimensions"><Input value={env.EMBEDDING_DIMENSIONS || ""} onChange={(v) => setE("EMBEDDING_DIMENSIONS", v)} placeholder="e.g. 768" /></Field>
+        <Field label="HF tokenizer"><Input value={env.HUGGINGFACE_TOKENIZER || ""} onChange={(v) => setE("HUGGINGFACE_TOKENIZER", v)} placeholder="nomic-ai/nomic-embed-text-v1.5" /></Field>
+
+        <div className="flex items-center gap-3 pt-1">
+          <button onClick={saveModels} disabled={busy} className={_btn}>{busy ? "Saving…" : "Save & reconnect"}</button>
+          {msg && <span className={`text-[12.5px] ${msg.ok ? "text-emerald-600 dark:text-emerald-400" : "text-brand-deep dark:text-amber-400"}`}>{msg.text}</span>}
+        </div>
+      </Section>
+
+      {/* Danger zone */}
+      <Section title="Danger zone" hint="Clear all stored Cognee memory (graph + vectors + metadata). Cannot be undone.">
+        {!confirm ? (
+          <button onClick={() => setConfirm(true)} disabled={busy || !cfg.connected}
+                  className="px-3 py-1.5 rounded-lg border text-[13px] disabled:opacity-50"
+                  style={{ borderColor: "#dc262666", color: "#dc2626" }}>Forget everything</button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-ink-soft dark:text-night-faint">Delete all Cognee memory?</span>
+            <button onClick={forgetAll} className="px-3 py-1.5 rounded-lg text-white text-[13px]" style={{ background: "#dc2626" }}>Yes, forget</button>
+            <button onClick={() => setConfirm(false)} className={_btnGhost + " text-[13px]"}>Cancel</button>
+          </div>
+        )}
+      </Section>
     </div>
   );
 }

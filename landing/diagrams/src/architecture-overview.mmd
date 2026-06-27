@@ -1,0 +1,33 @@
+flowchart TB
+  subgraph SURF["Surfaces"]
+    UI["Web UI<br/>React, streaming"]
+    TG["Telegram / Discord"]
+    VO["Browser voice"]
+  end
+  subgraph SVC["NammaAgentService"]
+    API["FastAPI server"]
+    AG["Agent loop"]
+  end
+  PR["Provider chain<br/>Anthropic · OpenAI · Google · local"]
+  subgraph CAP["Capabilities"]
+    TR["Tool registry<br/>~85 tools"]
+    MEM["Memory<br/>SQLite + FTS5"]
+    DOC["Project docs<br/>document RAG"]
+    MCP["MCP client"]
+  end
+  COG["Cognee<br/>Docker: graph + vectors"]
+
+  UI --> API
+  TG --> API
+  VO --> UI
+  API --> AG
+  AG --> PR
+  AG --> TR
+  AG --> MEM
+  AG --> DOC
+  AG --> MCP
+  MCP --> COG
+
+  class PR accent
+  class AG accent
+  classDef accent fill:#DF4B2A,stroke:#C13C1F,color:#FFFEFB;

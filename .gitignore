@@ -64,6 +64,8 @@ logs/*.log
 logs/
 #env
 .env
+.env.cognee
+.env.cognee.cloud
 
 scratch/*
 # Claude Code ephemeral worktrees (never commit)

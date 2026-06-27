@@ -6,6 +6,7 @@ headless, from tests, or behind any front end.
 """
 from __future__ import annotations
 
+import threading
 from typing import Callable, Optional
 
 from namma_agent.config import (
@@ -31,6 +32,11 @@ TokenFn = Callable[[str], None]
 ApprovalFn = Callable[[str, dict], bool]
 SpeakFn = Callable[[str], None]
 
+# Fixed name for the cognee MCP container so a stale/orphaned one can be force-removed
+# on (re)connect — `docker run --rm` containers outlive a killed parent and would
+# otherwise hold the Kuzu file lock, breaking the next launch until an app restart.
+_COGNEE_CONTAINER = "namma_cognee"
+
 
 class NammaAgentService:
     def __init__(
@@ -43,6 +49,9 @@ class NammaAgentService:
     ):
         import uuid as _uuid
         self._server_id = _uuid.uuid4().hex  # unique per process/boot (see info())
+        # Serialises MCP mutations (reload / per-server enable) — they read-modify-
+        # write self.config + rebuild self.mcp, so concurrent calls could lose updates.
+        self._mcp_lock = threading.RLock()
         self.config = config or load_config()
         # Filesystem access policy: reads anywhere, writes blocked in OS/software
         # trees. Let config.yaml (security.filesystem) tune the read-only roots.
@@ -71,7 +80,8 @@ class NammaAgentService:
         with self.registry.categorize("learning"):
             register_learning_tools(self.registry, self.db,
                                     get_comms=lambda: getattr(self, "comms", None),
-                                    config=self.config)
+                                    config=self.config,
+                                    get_cognee_ingestor=lambda: getattr(self, "cognee_ingestor", None))
         # Auto-discover capability tools (file/shell/system/apps/...). Skipped
         # when a registry is injected (tests provide their own minimal set).
         self.mcp = None
@@ -117,6 +127,17 @@ class NammaAgentService:
         self._speak = speak_fn
 
         self.auto_approve = bool(conv.get("auto_approve", False))
+        # Opt-in: grow the Cognee graph from normal chat (background, off the reply
+        # path). Default off so Namma is unchanged unless the user enables it.
+        from namma_agent.core.cognee_ingest import CogneeIngestor
+        cog_cfg = self.config.get("cognee") or {}
+        self.cognee_ingestor = CogneeIngestor(
+            client_getter=self._cognee_client,
+            enabled=bool(cog_cfg.get("auto_ingest", False)),
+            include_reply=bool(cog_cfg.get("ingest_replies", False)),
+            learning_enabled=bool(cog_cfg.get("ingest_learning", True)),
+        )
+
         self.agent = Agent(
             self.provider, self.registry, self.db, self.persona,
             tool_loop_limit=int(conv.get("tool_loop_limit", 0)),
@@ -125,6 +146,8 @@ class NammaAgentService:
             memory_notes=self.memory_notes,
             nudge_every=int(conv.get("memory_nudge_every", 6)),
             memory_extractor=self.memory_extractor,
+            cognee_ingestor=self.cognee_ingestor,
+            cognee_recall_context=bool(cog_cfg.get("recall_context", False)),
         )
 
         # Wave 4: delegate_task + persona tools need the live agent/provider/db.
@@ -280,16 +303,532 @@ class NammaAgentService:
         after the Config editor saves. Closes existing clients, drops their tools
         from the registry, and rebuilds. Persisted per-tool disabled flags are
         re-applied automatically (``register`` honours the disabled-set)."""
-        if self.mcp is not None:
+        with self._mcp_lock:
+            if self.mcp is not None:
+                try:
+                    self.mcp.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            for name in [n for n in self.registry.names() if n.startswith("mcp_")]:
+                self.registry.unregister(name)
+            with self.registry.categorize("mcp"):
+                self.mcp = self._build_mcp(self.config, self.registry)
+            return self.mcp_detail()
+
+    def set_mcp_server_enabled(self, name: str, enabled: bool) -> dict:
+        """Enable/disable a whole MCP server: flip its ``enabled`` flag in
+        ``config.local.yaml`` and reconnect. A disabled server isn't launched at
+        all (its container/process never starts), unlike per-tool toggles which
+        only hide individual tools of a still-running server."""
+        from namma_agent.config import update_config
+
+        with self._mcp_lock:
+            mcp = dict(self.config.get("mcp") or {})
+            servers = [dict(s) for s in (mcp.get("servers") or []) if isinstance(s, dict)]
+            found = False
+            for s in servers:
+                if (s.get("name") or "") == name:
+                    s["enabled"] = bool(enabled)
+                    found = True
+            if not found:
+                return {"ok": False, "error": f"no MCP server named {name!r} in config"}
+            self.config = update_config({"mcp": {"servers": servers}})
+            detail = self.reload_mcp()
+            return {"ok": True, "name": name, "enabled": bool(enabled), **detail}
+
+    # -- Cognee memory (the Memory tab proxies these to the cognee MCP server) ----
+
+    def _cognee_client(self):
+        """The connected cognee MCP client, or None. The Memory tab + its API call
+        Cognee directly through this, independent of the agent loop."""
+        clients = getattr(self.mcp, "clients", {}) if self.mcp else {}
+        return clients.get("cognee")
+
+    def memory_status(self) -> dict:
+        """Whether Cognee memory is available for the Memory tab."""
+        client = self._cognee_client()
+        if client is None:
+            return {"connected": False,
+                    "hint": "Cognee isn't connected. Add/enable the 'cognee' server in Settings → MCP."}
+        tools = [t.get("name") for t in client.list_tools()]
+        return {"connected": True, "tools": tools,
+                "pending_consolidation": self.cognee_pending()}
+
+    def cognee_tool(self, tool: str, args: dict, timeout: int = 120) -> dict:
+        """Call a cognee MCP tool for the Memory tab, with a clear error if Cognee
+        is offline (so the UI degrades gracefully instead of throwing)."""
+        client = self._cognee_client()
+        if client is None:
+            return {"ok": False, "error": "Cognee memory is not connected. Enable the "
+                    "'cognee' server in Settings → MCP, then try again."}
+        try:
+            return {"ok": True, "content": client.call_tool(tool, args or {}, timeout=timeout)}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"Cognee {tool} failed: {exc}"}
+
+    # The four memory-lifecycle ops the Memory tab exposes are remember, recall,
+    # forget and **improve** (Cognee's word for it = `cognify`). The cognee-mcp image
+    # has no standalone `improve`/`memify` tool, so we realise it the way Cognee's own
+    # lifecycle does: fast `session` remembers are buffered, then `consolidate`
+    # promotes them into the permanent knowledge graph via the cognify pipeline
+    # (entity extraction + linking) — which is exactly the "improve your memory" step.
+
+    def cognee_pending(self) -> int:
+        """How many session memories are buffered, waiting to be consolidated."""
+        return len(getattr(self, "_cognee_session", None) or [])
+
+    def cognee_remember(self, text: str, permanent: bool = True) -> dict:
+        """Store text in Cognee. ``permanent`` runs cognify (builds the graph now);
+        otherwise it's fast session memory — and the text is buffered so it can later
+        be promoted into the graph by :meth:`cognee_consolidate` (the improve op)."""
+        text = (text or "").strip()
+        if not text:
+            return {"ok": False, "error": "Nothing to remember."}
+        if permanent:
+            return self.cognee_tool("remember", {"data": text}, timeout=900)
+        res = self.cognee_tool("remember", {"data": text, "session_id": "namma_ui"}, timeout=120)
+        if res.get("ok"):
+            buf = getattr(self, "_cognee_session", None)
+            if buf is None:
+                buf = self._cognee_session = []
+            buf.append(text)
+            res["pending_consolidation"] = len(buf)
+        return res
+
+    def cognee_consolidate(self) -> dict:
+        """The **improve** op — promote buffered session memories into the permanent
+        knowledge graph by running cognify on each, then clear the buffer. This is
+        what visibly grows/tightens the graph in the demo."""
+        client = self._cognee_client()
+        if client is None:
+            return {"ok": False, "error": "Cognee memory is not connected."}
+        buf = list(getattr(self, "_cognee_session", None) or [])
+        if not buf:
+            return {"ok": True, "consolidated": 0, "pending_consolidation": 0,
+                    "content": "Nothing pending — store a few quick facts as session "
+                               "memory first, then consolidate them into the graph."}
+        done, errors = 0, []
+        for text in buf:
+            r = self.cognee_tool("remember", {"data": text}, timeout=900)
+            if r.get("ok"):
+                done += 1
+            else:
+                errors.append(r.get("error", "?"))
+        # Drop only the items we just processed (keep anything queued meanwhile).
+        self._cognee_session = (getattr(self, "_cognee_session", None) or [])[len(buf):]
+        msg = f"Consolidated {done} of {len(buf)} note(s) into the knowledge graph."
+        return {"ok": done > 0, "consolidated": done, "errors": errors,
+                "pending_consolidation": self.cognee_pending(),
+                "content": msg if done else "Consolidation failed: " + "; ".join(errors[:3])}
+
+    def memory_compare(self, query: str) -> dict:
+        """The 'money shot' — run the SAME query two ways: (1) Namma's original memory,
+        keyword search over SQLite (FTS5/BM25), and (2) Cognee's semantic + graph
+        recall. On a *reworded* question keyword search often returns nothing while
+        Cognee still answers — the before/after that motivates the whole integration."""
+        query = (query or "").strip()
+        if not query:
+            return {"ok": False, "error": "Enter a question to compare."}
+        # 1) Keyword memory (the old way) — facts + past turns, FTS5 with LIKE fallback.
+        hits: list[dict] = []
+        try:
+            for f in self.db.search_facts(query, limit=4):
+                hits.append({"kind": "fact", "text": f"{f.get('key')}: {f.get('value')}"})
+            for t in self.db.search_turns(query, limit=4):
+                txt = " ".join((t.get("content") or "").split())
+                if txt:
+                    hits.append({"kind": t.get("role", "turn"), "text": txt[:200]})
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"Keyword search failed: {exc}"}
+        # 2) Cognee semantic recall.
+        cog = self.cognee_tool("recall", {"query": query}, timeout=120)
+        return {"ok": True, "query": query,
+                "fts": {"count": len(hits), "hits": hits[:6]},
+                "cognee": {"connected": bool(cog.get("ok")),
+                           "answer": cog.get("content") if cog.get("ok") else (cog.get("error") or "")}}
+
+    def _cognee_serve_url(self) -> str:
+        """The Cognee Cloud instance URL if the cognee server is in cloud (serve)
+        mode, else "" (self-hosted). Read from the single `cognee` server command."""
+        servers = (self.config.get("mcp") or {}).get("servers") or []
+        srv = next((s for s in servers if isinstance(s, dict) and s.get("name") == "cognee"), None)
+        cmd = (srv or {}).get("command") or []
+        if "--serve-url" in cmd:
+            i = cmd.index("--serve-url")
+            if i + 1 < len(cmd):
+                return str(cmd[i + 1]).strip().rstrip("/")
+        return ""
+
+    def _cloud_graph(self, base: str) -> dict:
+        """Sync the knowledge graph from **Cognee Cloud** via its REST API. The
+        container's `visualize_graph_ui` can't run in serve mode (no local sqlite),
+        but the cloud exposes `GET /api/v1/datasets/{id}/graph` → {nodes, edges}.
+        Auth is the `X-Api-Key` header (NOT bearer)."""
+        import json
+        import urllib.request
+        import urllib.error
+
+        key = (self._read_cognee_env(self._cloud_env_path()).get("COGNEE_API_KEY") or "").strip()
+        if not key:
+            return {"ok": True, "nodes": [], "edges": [],
+                    "note": "Cognee Cloud API key missing — re-connect in Settings → Cognee → Backend."}
+
+        def api_get(path: str):
+            req = urllib.request.Request(base + path, headers={"X-Api-Key": key})
+            with urllib.request.urlopen(req, timeout=40) as r:
+                return json.loads(r.read().decode("utf-8", "replace"))
+
+        try:
+            datasets = api_get("/api/v1/datasets/") or []
+            ds = next((d for d in datasets if d.get("name") == "namma_agent_memory"), None) \
+                or (datasets[0] if datasets else None)
+            if not ds:
+                return {"ok": True, "nodes": [], "edges": [], "note": "graph is empty"}
+            g = api_get(f"/api/v1/datasets/{ds['id']}/graph") or {}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"Cloud graph fetch failed: {exc}",
+                    "nodes": [], "edges": []}
+
+        def label_of(n: dict) -> str:
+            props = n.get("properties") or {}
+            name = str(props.get("name") or "").strip()
+            if name:
+                return name
+            lab, typ = str(n.get("label") or "").strip(), str(n.get("type") or "").strip()
+            return typ if (typ and lab.startswith(typ + "_")) else (lab or typ or "node")
+
+        nodes = [{"id": n.get("id"), "label": label_of(n),
+                  "type": n.get("type") or "Entity", "color": ""}
+                 for n in (g.get("nodes") or []) if isinstance(n, dict) and n.get("id")]
+        ids = {n["id"] for n in nodes}
+        edges = [{"source": e.get("source"), "target": e.get("target"),
+                  "relation": (e.get("label") or e.get("relation") or "").strip()}
+                 for e in (g.get("edges") or [])
+                 if isinstance(e, dict) and e.get("source") in ids and e.get("target") in ids]
+        return {"ok": True, "nodes": nodes, "edges": edges, "source": "cloud",
+                "counts": {"nodes": len(nodes), "edges": len(edges)}}
+
+    def memory_graph(self) -> dict:
+        """Return the Cognee knowledge graph as ``{nodes, edges}`` for the Memory
+        tab's Obsidian-style render. Self-hosted: parse the embedded arrays from the
+        container's ``visualize_graph_ui`` HTML. Cognee Cloud (serve mode): that tool
+        can't reach a local DB, so we sync via the cloud REST graph endpoint instead."""
+        import json
+        import re
+
+        client = self._cognee_client()
+        if client is None:
+            return {"ok": False, "error": "Cognee memory is not connected.", "nodes": [], "edges": []}
+
+        serve_url = self._cognee_serve_url()
+        if serve_url:                       # Track B — pull the graph from the cloud API
+            return self._cloud_graph(serve_url)
+
+        def _balanced(html: str, start: int):
+            """Parse the JSON array starting at ``start`` (the '['), respecting
+            nesting + strings. Returns the list, or None on failure."""
+            depth = 0; in_str = False; esc = False; quote = ""
+            for i in range(start, len(html)):
+                c = html[i]
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif c == "\\":
+                        esc = True
+                    elif c == quote:
+                        in_str = False
+                elif c in ("\"", "'"):
+                    in_str = True; quote = c
+                elif c == "[":
+                    depth += 1
+                elif c == "]":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            return json.loads(html[start:i + 1])
+                        except Exception:  # noqa: BLE001
+                            return None
+            return None
+
+        def extract_array(html: str, var: str):
+            # The viz template can contain an empty placeholder (``nodes=[]``)
+            # BEFORE the real ``var nodes = [ … ]`` — so scan every match and take
+            # the first non-empty array (falling back to the last parsed one).
+            last = []
+            for m in re.finditer(rf"\b{var}\s*=\s*\[", html):
+                arr = _balanced(html, m.end() - 1)
+                if isinstance(arr, list):
+                    if arr:
+                        return arr
+                    last = arr
+            return last
+
+        # `errs` collects any error text the viz/info tools return. In Cognee Cloud
+        # serve mode those tools fail with "unable to open database file" (they read
+        # the container's LOCAL sqlite, which doesn't exist when the cloud owns the
+        # DB) — we detect that to degrade gracefully instead of showing an empty graph.
+        errs: list[str] = []
+
+        def _err_text(raw) -> str:
+            content = raw.get("content") if isinstance(raw, dict) else None
+            if isinstance(content, list):
+                return " ".join(c.get("text", "") for c in content
+                                if isinstance(c, dict) and c.get("type") == "text")
+            return ""
+
+        def viz(args: dict) -> str:
             try:
-                self.mcp.close()
-            except Exception:  # noqa: BLE001
-                pass
-        for name in [n for n in self.registry.names() if n.startswith("mcp_")]:
-            self.registry.unregister(name)
-        with self.registry.categorize("mcp"):
-            self.mcp = self._build_mcp(self.config, self.registry)
-        return self.mcp_detail()
+                raw = client.call_tool_raw("visualize_graph_ui", args, timeout=180)
+            except Exception as exc:  # noqa: BLE001
+                errs.append(str(exc)); return ""
+            sc = raw.get("structuredContent") if isinstance(raw, dict) else None
+            html = (sc or {}).get("html", "") if isinstance(sc, dict) else ""
+            if not html:
+                errs.append(_err_text(raw))
+            return html
+
+        # Resolve the agent-scoped dataset Cognee wrote to; the no-arg visualize
+        # falls back to the (empty) global engine in direct mode, so target the
+        # dataset explicitly and only fall back if that's empty.
+        dataset = None
+        try:
+            info = client.call_tool_raw("get_client_info_json", {}, timeout=30)
+            isc = info.get("structuredContent") if isinstance(info, dict) else None
+            if isinstance(isc, dict):
+                dataset = isc.get("default_dataset") or (isc.get("client") or {}).get("default_dataset")
+        except Exception:  # noqa: BLE001
+            dataset = None
+
+        html = viz({"dataset_name": dataset}) if dataset else ""
+        raw_nodes = extract_array(html, "nodes")
+        raw_links = extract_array(html, "links")
+        if not raw_nodes:  # fall back to the default/global view
+            html2 = viz({})
+            n2 = extract_array(html2, "nodes")
+            if n2:
+                html, raw_nodes, raw_links = html2, n2, extract_array(html2, "links")
+        if not html:
+            blob = " ".join(e for e in errs if e).lower()
+            if "unable to open database file" in blob or "error executing tool" in blob:
+                return {"ok": True, "nodes": [], "edges": [], "cloud_limited": True,
+                        "note": "The live graph view runs in self-hosted (Track A) mode. "
+                                "On Cognee Cloud, recall · remember · improve · forget all "
+                                "work here — open the Cognee Cloud dashboard for the visual graph."}
+            return {"ok": True, "nodes": [], "edges": [], "note": "graph is empty"}
+        nodes = [
+            {
+                "id": n.get("id"),
+                "label": (n.get("name") or n.get("type") or "").strip(),
+                "type": n.get("type") or "Entity",
+                "color": n.get("color") or "",
+            }
+            for n in raw_nodes if isinstance(n, dict) and n.get("id")
+        ]
+        ids = {n["id"] for n in nodes}
+        edges = [
+            {"source": l.get("source"), "target": l.get("target"),
+             "relation": (l.get("relation") or "").strip()}
+            for l in raw_links
+            if isinstance(l, dict) and l.get("source") in ids and l.get("target") in ids
+        ]
+        return {"ok": True, "nodes": nodes, "edges": edges,
+                "counts": {"nodes": len(nodes), "edges": len(edges)}}
+
+    # -- Cognee settings (Settings → Memory → Cognee) ----------------------
+
+    # Non-secret env keys exposed/editable in the Cognee settings tab. LLM_API_KEY
+    # is handled separately (write-only, masked on read).
+    _COGNEE_ENV_KEYS = [
+        "LLM_PROVIDER", "LLM_MODEL", "LLM_ENDPOINT",
+        "EMBEDDING_PROVIDER", "EMBEDDING_MODEL", "EMBEDDING_ENDPOINT",
+        "EMBEDDING_DIMENSIONS", "HUGGINGFACE_TOKENIZER",
+    ]
+
+    def _cognee_env_path(self):
+        from namma_agent.config import _REPO_ROOT
+        return _REPO_ROOT / ".env.cognee"
+
+    def _cloud_env_path(self):
+        """Secrets for the Cognee Cloud (Track B) server live in their own gitignored
+        file so the API key never lands in config.local.yaml's command array."""
+        from namma_agent.config import _REPO_ROOT
+        return _REPO_ROOT / ".env.cognee.cloud"
+
+    def _read_cognee_env(self, path=None) -> dict:
+        p = path or self._cognee_env_path()
+        out: dict[str, str] = {}
+        if p.exists():
+            for raw in p.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                out[k.strip()] = v.strip()
+        return out
+
+    def _write_cognee_env(self, updates: dict, path=None) -> None:
+        """Update KEY=value lines in .env.cognee, preserving comments/other lines.
+        Does NOT touch os.environ (these vars are for the container, not Namma)."""
+        p = path or self._cognee_env_path()
+        lines = p.read_text(encoding="utf-8").splitlines() if p.exists() else []
+        for key, value in (updates or {}).items():
+            key = str(key).strip()
+            if not key:
+                continue
+            new = f"{key}={'' if value is None else value}"
+            for i, raw in enumerate(lines):
+                s = raw.strip()
+                if s and not s.startswith("#") and s.split("=", 1)[0].strip() == key:
+                    lines[i] = new
+                    break
+            else:
+                lines.append(new)
+        p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def cognee_settings(self) -> dict:
+        """Everything the Cognee settings tab needs: connection/server status, the
+        editable .env.cognee values (key masked), and the cognee.* behaviour flags."""
+        env = self._read_cognee_env()
+        cog = self.config.get("cognee") or {}
+        servers = (self.config.get("mcp") or {}).get("servers") or []
+        server = next((s for s in servers if isinstance(s, dict) and s.get("name") == "cognee"), None)
+        key = (env.get("LLM_API_KEY") or "").strip()
+        # Track A (self-hosted) vs Track B (Cognee Cloud) is detected from the single
+        # `cognee` server entry: a cloud entry carries `--serve-url <instance>`.
+        cmd = (server or {}).get("command") or []
+        serve_url = ""
+        if "--serve-url" in cmd:
+            i = cmd.index("--serve-url")
+            serve_url = cmd[i + 1] if i + 1 < len(cmd) else ""
+        mode = "cloud" if serve_url else "local"
+        cloud_key = (self._read_cognee_env(self._cloud_env_path()).get("COGNEE_API_KEY") or "").strip()
+        return {
+            "connected": self._cognee_client() is not None,
+            "server_present": server is not None,
+            "server_enabled": (bool(server.get("enabled", True)) if server else False),
+            "env": {k: env.get(k, "") for k in self._COGNEE_ENV_KEYS},
+            "llm_api_key_set": bool(key) and not key.upper().startswith("REPLACE"),
+            "auto_ingest": bool(cog.get("auto_ingest", False)),
+            "ingest_replies": bool(cog.get("ingest_replies", False)),
+            "ingest_learning": bool(cog.get("ingest_learning", True)),
+            "recall_context": bool(cog.get("recall_context", False)),
+            # Track B (Cloud) status — same Memory tab/code, only this entry differs.
+            "mode": mode,
+            "serve_url": serve_url,
+            "cloud_key_set": bool(cloud_key) and not cloud_key.upper().startswith("REPLACE"),
+        }
+
+    def save_cognee_settings(self, env: Optional[dict] = None, flags: Optional[dict] = None) -> dict:
+        """Persist Cognee config from the UI: model/embedding env → .env.cognee,
+        behaviour flags → config.local.yaml (applied live). Reconnects the server
+        only when the container env changed (so model edits take effect)."""
+        from namma_agent.config import update_config
+
+        updates = {k: env[k] for k in self._COGNEE_ENV_KEYS if env and k in env and env[k] is not None}
+        if env and (env.get("LLM_API_KEY") or "").strip():
+            updates["LLM_API_KEY"] = env["LLM_API_KEY"].strip()  # only write a non-empty key
+        if updates:
+            self._write_cognee_env(updates)
+
+        if flags:
+            cog: dict = {}
+            if "auto_ingest" in flags:
+                cog["auto_ingest"] = bool(flags["auto_ingest"])
+            if "ingest_replies" in flags:
+                cog["ingest_replies"] = bool(flags["ingest_replies"])
+            if "ingest_learning" in flags:
+                cog["ingest_learning"] = bool(flags["ingest_learning"])
+            if "recall_context" in flags:
+                cog["recall_context"] = bool(flags["recall_context"])
+            if cog:
+                self.config = update_config({"cognee": cog})
+                if getattr(self, "cognee_ingestor", None) is not None:  # apply live
+                    if "auto_ingest" in cog:
+                        self.cognee_ingestor.enabled = cog["auto_ingest"]
+                    if "ingest_replies" in cog:
+                        self.cognee_ingestor.include_reply = cog["ingest_replies"]
+                    if "ingest_learning" in cog:
+                        self.cognee_ingestor.learning_enabled = cog["ingest_learning"]
+                if "recall_context" in cog and getattr(self, "agent", None) is not None:
+                    self.agent._cognee_recall_context_on = cog["recall_context"]
+
+        if updates:   # model/embedding env changed → reconnect so the container reloads
+            self.reload_mcp()
+        return {"ok": True, **self.cognee_settings()}
+
+    def register_cognee_server(self, mode: str = "local",
+                               serve_url: str = "", api_key: str = "") -> dict:
+        """One-click: set the single `cognee` MCP server entry to the requested track
+        and (re)connect — so the user doesn't hand-write the docker command.
+
+        ``mode="local"`` (Track A) = the self-hosted container (Ollama + Kuzu/LanceDB).
+        ``mode="cloud"`` (Track B) = the SAME image in serve mode against Cognee Cloud
+        (`--serve-url <instance>` + `COGNEE_API_KEY`); the cloud owns its DB/embeddings,
+        so no local network/volume is needed. Either way the entry is named `cognee`,
+        so the Memory tab, graph, and ingestor are unchanged — only this entry differs.
+        """
+        from namma_agent.config import update_config
+
+        mode = (mode or "local").strip().lower()
+        if mode == "cloud":
+            url = (serve_url or "").strip().rstrip("/")
+            if not url:
+                return {"ok": False, "error": "A Cognee Cloud instance URL is required "
+                        "(e.g. https://your-instance.cognee.ai)."}
+            if (api_key or "").strip():  # secret → its own gitignored file, never config
+                self._write_cognee_env({"COGNEE_API_KEY": api_key.strip()},
+                                       path=self._cloud_env_path())
+            elif not (self._read_cognee_env(self._cloud_env_path()).get("COGNEE_API_KEY") or "").strip():
+                return {"ok": False, "error": "A Cognee Cloud API key is required the first "
+                        "time (get it from platform.cognee.ai)."}
+            env_path = str(self._cloud_env_path()).replace("\\", "/")
+            entry = {
+                "name": "cognee",
+                # `--name` lets the client force-remove a stale container so switching
+                # backends doesn't leave a lock-holding orphan. args after the image go
+                # to cognee-mcp; `cognee.serve()` then routes ALL ops to the cloud.
+                "command": ["docker", "run", "-i", "--rm", "--name", _COGNEE_CONTAINER,
+                            "--env-file", env_path,
+                            "cognee/cognee-mcp:main", "--serve-url", url],
+                "enabled": True, "connect_timeout": 90, "call_timeout": 900,
+            }
+        else:
+            env_path = str(self._cognee_env_path()).replace("\\", "/")
+            entry = {
+                "name": "cognee",
+                "command": ["docker", "run", "-i", "--rm", "--name", _COGNEE_CONTAINER,
+                            "--network", "agi_default",
+                            "--env-file", env_path, "-v", "cognee-data:/cognee-data",
+                            "cognee/cognee-mcp:main"],
+                "enabled": True, "connect_timeout": 90, "call_timeout": 900,
+            }
+
+        servers = [dict(s) for s in ((self.config.get("mcp") or {}).get("servers") or [])
+                   if isinstance(s, dict) and s.get("name") != "cognee"]
+        servers.append(entry)   # upsert: swap the single cognee entry for the chosen track
+        self.config = update_config({"mcp": {"servers": servers}})
+        # Switching backends: stop ANY running cognee container first (covers legacy
+        # un-named ones the per-client cleanup can't target by name), so the new
+        # container — local or cloud — starts clean instead of hitting a held lock.
+        self._stop_cognee_containers()
+        self.reload_mcp()
+        return {"ok": True, **self.cognee_settings()}
+
+    @staticmethod
+    def _stop_cognee_containers() -> None:
+        """Force-remove every running cognee-mcp container (best-effort). Used on a
+        backend switch so a leftover Kuzu-locking container can't block the new one."""
+        import subprocess
+        try:
+            out = subprocess.run(
+                ["docker", "ps", "-aq", "--filter", "ancestor=cognee/cognee-mcp:main"],
+                capture_output=True, text=True, timeout=20)
+            ids = [x for x in (out.stdout or "").split() if x]
+            if ids:
+                subprocess.run(["docker", "rm", "-f", *ids], stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=30)
+        except Exception:  # noqa: BLE001
+            pass
 
     # -- reminders ---------------------------------------------------------
 

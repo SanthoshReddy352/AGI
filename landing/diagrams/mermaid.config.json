@@ -1,0 +1,30 @@
+{
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Satoshi, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif",
+    "fontSize": "15px",
+    "primaryColor": "#FFFEFB",
+    "primaryBorderColor": "#D8CFC1",
+    "primaryTextColor": "#211C18",
+    "secondaryColor": "#FBE9E2",
+    "secondaryBorderColor": "#E7B9AC",
+    "secondaryTextColor": "#211C18",
+    "tertiaryColor": "#F1ECE3",
+    "tertiaryBorderColor": "#D8CFC1",
+    "tertiaryTextColor": "#211C18",
+    "lineColor": "#A89C8E",
+    "textColor": "#211C18",
+    "clusterBkg": "#F1ECE3",
+    "clusterBorder": "#D8CFC1",
+    "edgeLabelBackground": "#F7F4EF",
+    "nodeBorder": "#D8CFC1"
+  },
+  "flowchart": {
+    "htmlLabels": true,
+    "curve": "basis",
+    "padding": 16,
+    "nodeSpacing": 48,
+    "rankSpacing": 56,
+    "useMaxWidth": true
+  }
+}

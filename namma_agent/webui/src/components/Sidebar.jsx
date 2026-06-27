@@ -86,6 +86,7 @@ export default function Sidebar({ sessions, projects = [], onNew, onOpen, onDele
         <nav className="px-3 mt-2 space-y-0.5">
           {navItem("/projects", <FolderIcon />, "Projects", pathname.startsWith("/projects"))}
           {navItem("/learning", <CapIcon />, "Learning Room", pathname.startsWith("/learning"))}
+          {navItem("/memory", <MemoryIcon />, "Memory", pathname.startsWith("/memory"))}
         </nav>
 
         {/* Recent chats (only when expanded) */}
@@ -220,5 +221,7 @@ const MoreIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" {...stro
 const PencilIcon = () => (<svg width="15" height="15" viewBox="0 0 24 24" {...stroke}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" /></svg>);
 const ChevronRight = () => (<svg width="14" height="14" viewBox="0 0 24 24" {...stroke}><path d="m9 6 6 6-6 6" /></svg>);
 const CapIcon = () => (<svg width="20" height="20" viewBox="0 0 24 24" {...stroke}><path d="M2 9 12 4l10 5-10 5L2 9Z" /><path d="M6 11v5c0 1 2.7 2.5 6 2.5s6-1.5 6-2.5v-5" /><path d="M22 9v5" /></svg>);
+// Memory = a small knowledge-graph mark (nodes + links).
+const MemoryIcon = () => (<svg width="20" height="20" viewBox="0 0 24 24" {...stroke}><circle cx="6" cy="7" r="2.2" /><circle cx="18" cy="8" r="2.2" /><circle cx="12" cy="17" r="2.2" /><path d="M7.8 8.4 10.4 15M16.7 9.7 13.3 15.6M8 7.4 16 8" /></svg>);
 const TrashIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" {...stroke}><path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>);
 const GearIcon = () => (<svg width="19" height="19" viewBox="0 0 24 24" {...stroke}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>);

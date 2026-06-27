@@ -1,0 +1,112 @@
+/* ============================================================
+   VELLUM — FX layer
+   Custom scrollbar · highlighter cursor (tiny square pixel) ·
+   pixel-accent toolkit. Decorative, token-driven, accessible.
+   ============================================================ */
+
+/* ---------------------------------------------------------- */
+/* Custom scrollbar — slim, warm, accent on hover             */
+/* ---------------------------------------------------------- */
+html { scrollbar-width: thin; scrollbar-color: var(--sb-thumb) transparent; }
+
+*::-webkit-scrollbar { width: var(--sb-size); height: var(--sb-size); }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb);
+  border-radius: var(--r-pill);
+  border: 3px solid var(--canvas);     /* inset look, ~6px visible thumb */
+  background-clip: padding-box;
+  transition: background .2s;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--sb-thumb-hover); }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* Compact scrollers inside cards (palette, menus) get a thinner one */
+.palette__list::-webkit-scrollbar,
+.menu::-webkit-scrollbar { width: 8px; }
+.palette__list::-webkit-scrollbar-thumb,
+.menu::-webkit-scrollbar-thumb { border-width: 2px; }
+
+/* ---------------------------------------------------------- */
+/* Cursor — just the pixel: a single crisp Ember square at the */
+/* tip. Native cursor stays for accessibility.                 */
+/* ---------------------------------------------------------- */
+.cursor-dot {
+  position: fixed;
+  top: 0; left: 0;
+  z-index: 9999;
+  pointer-events: none;
+  will-change: transform;
+  width: var(--cursor-size);
+  height: var(--cursor-size);
+  background: var(--accent);
+  transform: translate3d(var(--cx, -100px), var(--cy, -100px), 0) translate(-50%, -50%);
+  transition: opacity .2s var(--ease-out);
+  /* no border-radius: a crisp pixel square */
+}
+
+/* hide entirely on touch / coarse pointers */
+@media (hover: none), (pointer: coarse) {
+  .cursor-dot { display: none !important; }
+}
+
+/* ---------------------------------------------------------- */
+/* Pixel-accent toolkit — tiny square pixels, used sparingly   */
+/* ---------------------------------------------------------- */
+
+/* faint pixel field background (a deliberate texture, not a takeover) */
+.pixel-field {
+  background-image:
+    linear-gradient(var(--pixel-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--pixel-color) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+}
+/* denser dotted variant */
+.pixel-dots {
+  background-image: radial-gradient(var(--pixel-color) 1.4px, transparent 1.6px);
+  background-size: 16px 16px;
+}
+
+/* a divider made of marching pixel squares */
+.pixel-rule {
+  height: var(--pixel);
+  background-image: linear-gradient(90deg, var(--line-strong) var(--pixel), transparent var(--pixel));
+  background-size: calc(var(--pixel) * 2) var(--pixel);
+  background-repeat: repeat-x;
+  border: 0;
+  opacity: .8;
+}
+
+/* pixel chip: a little stack of squares used as an eyebrow mark */
+.pixel-mark {
+  display: inline-grid;
+  grid-template-columns: repeat(3, var(--pixel));
+  grid-auto-rows: var(--pixel);
+  gap: 1px;
+  vertical-align: middle;
+}
+.pixel-mark i { background: var(--accent); }
+.pixel-mark i:nth-child(2),
+.pixel-mark i:nth-child(4),
+.pixel-mark i:nth-child(8) { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* pixel corner ticks on a surface (top-left + bottom-right) */
+.pixel-corners { position: relative; }
+.pixel-corners::before,
+.pixel-corners::after {
+  content: "";
+  position: absolute;
+  width: var(--pixel); height: var(--pixel);
+  background: var(--accent);
+}
+.pixel-corners::before { top: 10px; left: 10px; }
+.pixel-corners::after  { bottom: 10px; right: 10px; }
+
+/* an animated "loading" row of pixels */
+@keyframes pixel-pulse { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+.pixel-loader { display: inline-flex; gap: 3px; }
+.pixel-loader i { width: var(--pixel); height: var(--pixel); background: var(--accent); animation: pixel-pulse 1s var(--ease-out) infinite; }
+.pixel-loader i:nth-child(2) { animation-delay: .12s; }
+.pixel-loader i:nth-child(3) { animation-delay: .24s; }
+.pixel-loader i:nth-child(4) { animation-delay: .36s; }

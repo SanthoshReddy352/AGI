@@ -1,0 +1,11 @@
+flowchart LR
+  PH["Your phone<br/>Telegram"] <-->|"long-poll"| BR["Comms bridge<br/>inbound + outbound"]
+  VM["Voice message"] --> STT["STT endpoint<br/>optional, OpenAI-compatible"]
+  STT --> BR
+  BR --> SVC["NammaAgentService"]
+  SVC --> AG["Agent loop"]
+  AG --> SVC
+  SVC -->|"reply"| BR
+
+  class SVC accent
+  classDef accent fill:#DF4B2A,stroke:#C13C1F,color:#FFFEFB;

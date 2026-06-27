@@ -1,0 +1,72 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Namma Agent — Intelligence for everyone">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#DF4B2A"/>
+      <stop offset="1" stop-color="#C13C1F"/>
+    </linearGradient>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="2" fill="#211C18" opacity="0.05"/>
+    </pattern>
+  </defs>
+
+  <!-- warm canvas -->
+  <rect width="1200" height="630" fill="#F7F4EF"/>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+
+  <!-- a soft constellation in the corner: agent + knowledge graph -->
+  <g opacity="0.9">
+    <g stroke="#D8CFC1" stroke-width="2">
+      <path d="M980 150 L1080 110"/>
+      <path d="M980 150 L1070 230"/>
+      <path d="M980 150 L900 235"/>
+      <path d="M1070 230 L1120 320"/>
+      <path d="M900 235 L940 340"/>
+    </g>
+    <g fill="#DF4B2A">
+      <circle cx="980" cy="150" r="13"/>
+    </g>
+    <g fill="#A89C8E">
+      <circle cx="1080" cy="110" r="7"/>
+      <circle cx="1070" cy="230" r="7"/>
+      <circle cx="900" cy="235" r="7"/>
+      <circle cx="1120" cy="320" r="6"/>
+      <circle cx="940" cy="340" r="6"/>
+    </g>
+  </g>
+
+  <!-- brand lockup -->
+  <g transform="translate(110 150)">
+    <rect width="92" height="92" rx="24" fill="url(#tile)"/>
+    <g transform="translate(46 46)">
+      <g stroke="#FFFEFB" stroke-width="5.4" stroke-linecap="round">
+        <path d="M0 0 L-19 -17"/>
+        <path d="M0 0 L21 -13"/>
+        <path d="M0 0 L-9 23"/>
+      </g>
+      <g fill="#FFFEFB">
+        <circle r="9.5"/>
+        <circle cx="-19" cy="-17" r="6"/>
+        <circle cx="21" cy="-13" r="6"/>
+        <circle cx="-9" cy="23" r="6"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- eyebrow -->
+  <text x="112" y="320" font-family="'Space Mono', ui-monospace, monospace" font-size="22" letter-spacing="6" fill="#75695E">PERSONAL AI ASSISTANT, RUN BY YOU</text>
+
+  <!-- wordmark / headline -->
+  <text x="108" y="408" font-family="'Clash Display', 'Satoshi', system-ui, sans-serif" font-weight="600" font-size="92" letter-spacing="-3" fill="#211C18">Namma Agent</text>
+
+  <!-- tagline -->
+  <text x="112" y="478" font-family="'Satoshi', system-ui, sans-serif" font-size="34" fill="#75695E">One agent, any brain. Memory, tools, and a knowledge graph.</text>
+
+  <!-- footer rule + meta -->
+  <rect x="112" y="528" width="976" height="2" fill="#E7E0D6"/>
+  <text x="112" y="572" font-family="'Satoshi', system-ui, sans-serif" font-size="24" fill="#A89C8E">Anthropic · OpenAI · Google · Ollama · MCP · Cognee</text>
+  <g transform="translate(1052 548)" fill="#DF4B2A">
+    <rect width="9" height="9" rx="1.5"/><rect x="13" width="9" height="9" rx="1.5"/><rect x="26" width="9" height="9" rx="1.5"/>
+    <rect y="13" width="9" height="9" rx="1.5"/><rect x="26" y="13" width="9" height="9" rx="1.5"/>
+    <rect y="26" width="9" height="9" rx="1.5"/><rect x="13" y="26" width="9" height="9" rx="1.5"/><rect x="26" y="26" width="9" height="9" rx="1.5"/>
+  </g>
+</svg>

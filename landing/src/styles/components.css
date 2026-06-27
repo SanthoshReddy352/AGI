@@ -1,0 +1,413 @@
+/* ============================================================
+   VELLUM — Components
+   Recurring pieces, drawn once. No two cards in a row identical.
+   ============================================================ */
+
+/* ---------------------------------------------------------- */
+/* Buttons                                                     */
+/* ---------------------------------------------------------- */
+.btn {
+  --btn-y: 13px;
+  --btn-x: 22px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  padding: var(--btn-y) var(--btn-x);
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  background: transparent;
+  transition:
+    transform var(--t-fast) var(--ease-spring),
+    box-shadow var(--t-base) var(--ease-out),
+    background var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out);
+  will-change: transform;
+}
+.btn:active { transition-duration: 60ms; }
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--e1);
+}
+.btn--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px -8px rgba(223, 75, 42, .45), var(--e2);
+}
+.btn--primary:active {
+  background: var(--accent-press);
+  transform: translateY(0);
+  box-shadow: var(--e1);
+}
+
+.btn--secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line-strong);
+  box-shadow: var(--e1);
+}
+.btn--secondary:hover {
+  transform: translateY(-2px);
+  border-color: var(--ink-faint);
+  box-shadow: var(--e2);
+}
+.btn--secondary:active { transform: translateY(0); }
+
+.btn--ghost {
+  color: var(--ink);
+  border-color: var(--line);
+}
+.btn--ghost:hover { background: var(--surface-sunken); border-color: var(--line-strong); }
+
+.btn--lg { --btn-y: 16px; --btn-x: 28px; font-size: var(--fs-body); }
+.btn--sm { --btn-y: 9px; --btn-x: 16px; font-size: var(--fs-micro); }
+
+.btn .arrow { transition: transform var(--t-base) var(--ease-spring); }
+.btn:hover .arrow { transform: translateX(3px); }
+
+/* ---------------------------------------------------------- */
+/* Card                                                        */
+/* ---------------------------------------------------------- */
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--s-6);
+  box-shadow: var(--e1);
+  transition:
+    transform var(--t-slow) var(--ease-out),
+    box-shadow var(--t-slow) var(--ease-out),
+    border-color var(--t-slow) var(--ease-out);
+}
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--e3);
+  border-color: var(--line-strong);
+}
+
+/* Spotlight-edge card: a soft glow follows the cursor.
+   Driven by --mx / --my set in motion.js. Purposeful, not glass. */
+.card--spotlight { overflow: hidden; }
+.card--spotlight::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(
+    340px circle at var(--mx, 50%) var(--my, 0%),
+    var(--accent), transparent 60%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--t-base) var(--ease-out);
+  pointer-events: none;
+}
+.card--spotlight:hover::before { opacity: .7; }
+
+.card__icon {
+  display: grid;
+  place-items: center;
+  width: 48px; height: 48px;
+  border-radius: var(--r-md);
+  background: var(--accent-tint);
+  color: var(--accent);
+  margin-bottom: var(--s-4);
+}
+.card h3 { margin-bottom: var(--s-2); }
+.card p  { color: var(--ink-muted); }
+
+/* Tilt wrapper — JS sets --rx / --ry */
+.tilt {
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transform-style: preserve-3d;
+  transition: transform var(--t-base) var(--ease-out);
+}
+
+/* ---------------------------------------------------------- */
+/* Badge / Pill                                                */
+/* ---------------------------------------------------------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px 5px 9px;
+  border-radius: var(--r-pill);
+  background: var(--accent-tint);
+  color: var(--accent-press);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  font-weight: 500;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.badge--pine { background: var(--pine-tint); color: var(--pine); border-color: color-mix(in srgb, var(--pine) 18%, transparent); }
+.badge--pine .dot { background: var(--pine); }
+.badge--quiet { background: var(--surface-sunken); color: var(--ink-muted); border-color: var(--line); }
+.badge--quiet .dot { background: var(--ink-faint); }
+
+/* ---------------------------------------------------------- */
+/* Input + floating label                                      */
+/* ---------------------------------------------------------- */
+.field { position: relative; }
+.field input,
+.field textarea {
+  width: 100%;
+  padding: 22px 16px 10px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  transition: border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+  font-size: var(--fs-body);
+}
+.field textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
+.field input::placeholder,
+.field textarea::placeholder { color: transparent; }
+.field label {
+  position: absolute;
+  left: 17px; top: 16px;
+  color: var(--ink-faint);
+  font-size: var(--fs-body);
+  pointer-events: none;
+  transform-origin: left center;
+  transition: transform var(--t-base) var(--ease-out), color var(--t-base) var(--ease-out);
+}
+.field input:focus,
+.field textarea:focus {
+  outline: none;
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.field input:focus + label,
+.field input:not(:placeholder-shown) + label,
+.field textarea:focus + label,
+.field textarea:not(:placeholder-shown) + label {
+  transform: translateY(-11px) scale(0.78);
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ---------------------------------------------------------- */
+/* Toggle switch                                               */
+/* ---------------------------------------------------------- */
+.switch { display: inline-flex; align-items: center; gap: var(--s-3); cursor: pointer; user-select: none; }
+.switch input { position: absolute; opacity: 0; pointer-events: none; }
+.switch .track {
+  width: 46px; height: 27px;
+  border-radius: var(--r-pill);
+  background: var(--line-strong);
+  padding: 3px;
+  transition: background var(--t-base) var(--ease-out);
+}
+.switch .thumb {
+  width: 21px; height: 21px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--e1);
+  transition: transform var(--t-base) var(--ease-spring);
+}
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track .thumb { transform: translateX(19px); }
+.switch input:focus-visible + .track { box-shadow: var(--ring); }
+
+/* large */
+.switch--lg .track { width: 58px; height: 33px; }
+.switch--lg .thumb { width: 27px; height: 27px; }
+.switch--lg input:checked + .track .thumb { transform: translateX(25px); }
+
+/* icon switch: sun + moon on each side, thumb glides over. Track stays
+   neutral (it's a theme toggle, not an on/off accent). */
+.switch--icon .track {
+  position: relative;
+  width: 66px; height: 34px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 9px;
+  background: var(--surface-sunken);
+}
+.switch--icon input:checked + .track { background: var(--surface-sunken); }
+.switch--icon .track svg { width: 15px; height: 15px; color: var(--ink-faint); position: relative; z-index: 0; }
+.switch--icon .thumb {
+  position: absolute; left: 4px; top: 4px;
+  width: 26px; height: 26px;
+  z-index: 1;
+}
+.switch--icon input:checked + .track .thumb { transform: translateX(32px); }
+
+/* pill switch with ON / OFF labels */
+.switch-pill {
+  display: inline-flex;
+  position: relative;
+  padding: 4px;
+  border-radius: var(--r-pill);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: .06em;
+}
+.switch-pill input { position: absolute; opacity: 0; }
+.switch-pill span {
+  position: relative; z-index: 1;
+  padding: 6px 13px; border-radius: var(--r-pill);
+  color: var(--ink-faint);
+  transition: color var(--t-base) var(--ease-out);
+}
+.switch-pill .knob {
+  position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 4px;
+  width: calc(50% - 4px);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: var(--e1);
+  transition: transform var(--t-base) var(--ease-spring);
+}
+.switch-pill input:checked ~ .knob { transform: translateX(100%); }
+.switch-pill input:not(:checked) ~ .off { color: var(--ink); }
+.switch-pill input:checked ~ .on { color: var(--accent); }
+
+/* ---------------------------------------------------------- */
+/* Segmented tabs with spring indicator                        */
+/* ---------------------------------------------------------- */
+.tabs {
+  position: relative;
+  display: inline-flex;
+  padding: 4px;
+  gap: 2px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+}
+.tabs__ink {
+  position: absolute;
+  top: 4px; bottom: 4px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow: var(--e1);
+  transition: transform var(--t-base) var(--ease-spring), width var(--t-base) var(--ease-spring);
+  z-index: 0;
+}
+.tabs button {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  border: 0;
+  padding: 9px 18px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: color var(--t-base) var(--ease-out);
+}
+.tabs button[aria-selected="true"] { color: var(--ink); }
+
+/* ---------------------------------------------------------- */
+/* Navigation                                                  */
+/* ---------------------------------------------------------- */
+.nav {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-5);
+  padding: 18px var(--gutter);
+  transition: padding var(--t-base) var(--ease-out), background var(--t-base) var(--ease-out), box-shadow var(--t-base) var(--ease-out), border-color var(--t-base) var(--ease-out);
+  border-bottom: 1px solid transparent;
+}
+.nav.is-condensed {
+  padding-block: 11px;
+  background: color-mix(in srgb, var(--canvas) 82%, transparent);
+  backdrop-filter: saturate(140%) blur(14px);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  border-bottom-color: var(--line);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+.brand .mark {
+  width: 26px; height: 26px;
+  border-radius: 8px;
+  background: var(--accent);
+  display: grid; place-items: center;
+  color: var(--accent-ink);
+  box-shadow: var(--e1);
+}
+.nav__links { display: flex; gap: var(--s-5); align-items: center; }
+.nav__links a {
+  position: relative;
+  font-size: var(--fs-small);
+  color: var(--ink-muted);
+  font-weight: 500;
+  transition: color var(--t-fast) var(--ease-out);
+}
+.nav__links a::after {
+  content: ""; position: absolute; left: 0; bottom: -4px;
+  width: 100%; height: 1.5px; background: var(--accent);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform var(--t-base) var(--ease-out);
+}
+.nav__links a:hover { color: var(--ink); }
+.nav__links a:hover::after { transform: scaleX(1); }
+.nav__right { display: flex; align-items: center; gap: var(--s-4); }
+
+@media (max-width: 760px) {
+  .nav__links { display: none; }
+}
+
+/* Theme toggle button */
+.icon-btn {
+  display: grid; place-items: center;
+  width: 40px; height: 40px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  transition: transform var(--t-fast) var(--ease-spring), border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+}
+.icon-btn:hover { transform: rotate(-12deg) scale(1.05); border-color: var(--line-strong); }
+.icon-btn:active { transform: scale(0.94); }
+.icon-btn svg { width: 18px; height: 18px; }
+.icon-btn .moon { display: none; }
+[data-theme="dark"] .icon-btn .sun { display: none; }
+[data-theme="dark"] .icon-btn .moon { display: block; }
+
+/* ---------------------------------------------------------- */
+/* Divider / hairline                                          */
+/* ---------------------------------------------------------- */
+.hr { height: 1px; background: var(--line); border: 0; margin-block: var(--s-7); }
+
+/* swatch + token chips used in the showcase */
+.swatch {
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: var(--surface);
+}
+.swatch .chip { height: 76px; }
+.swatch .meta { padding: 10px 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.swatch .meta b { font-size: var(--fs-small); font-weight: 600; }
+.swatch .meta code { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }

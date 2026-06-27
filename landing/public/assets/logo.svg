@@ -1,0 +1,14 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Namma Agent">
+  <!-- node-graph mark, drawn in currentColor so it adapts to any surface -->
+  <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M12 12 L6.5 7"/>
+    <path d="M12 12 L18 8.5"/>
+    <path d="M12 12 L9.5 18.5"/>
+  </g>
+  <g fill="currentColor">
+    <circle cx="12" cy="12" r="2.6"/>
+    <circle cx="6.5" cy="7" r="1.7"/>
+    <circle cx="18" cy="8.5" r="1.7"/>
+    <circle cx="9.5" cy="18.5" r="1.7"/>
+  </g>
+</svg>

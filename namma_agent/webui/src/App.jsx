@@ -14,6 +14,7 @@ import ProjectsView from "./views/ProjectsView.jsx";
 import ProjectDetailView from "./views/ProjectDetailView.jsx";
 import LearningView from "./views/LearningView.jsx";
 import LearningDetailView from "./views/LearningDetailView.jsx";
+import MemoryView from "./views/MemoryView.jsx";
 
 // App shell: one WebSocket turn channel (useNammaAgent) shared by every route via the
 // router Outlet context. The sidebar and global modals (approval / password /
@@ -168,6 +169,7 @@ export default function App() {
           <Route path="projects/:id" element={<ProjectDetailView />} />
           <Route path="learning" element={<LearningView />} />
           <Route path="learning/:id" element={<LearningDetailView />} />
+          <Route path="memory" element={<MemoryView />} />
         </Route>
       </Routes>
     </BrowserRouter>

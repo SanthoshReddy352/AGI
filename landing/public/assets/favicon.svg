@@ -1,0 +1,15 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" rx="8" fill="#DF4B2A"/>
+  <!-- node-graph glyph: a central agent node with three linked satellites -->
+  <g stroke="#FFFEFB" stroke-width="2" stroke-linecap="round" fill="none">
+    <path d="M16 16 L9 9.5"/>
+    <path d="M16 16 L23.5 11"/>
+    <path d="M16 16 L13 24"/>
+  </g>
+  <g fill="#FFFEFB">
+    <circle cx="16" cy="16" r="3.4"/>
+    <circle cx="9" cy="9.5" r="2.1"/>
+    <circle cx="23.5" cy="11" r="2.1"/>
+    <circle cx="13" cy="24" r="2.1"/>
+  </g>
+</svg>
