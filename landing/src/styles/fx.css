@@ -7,7 +7,7 @@
 /* ---------------------------------------------------------- */
 /* Custom scrollbar — slim, warm, accent on hover             */
 /* ---------------------------------------------------------- */
-html { scrollbar-width: thin; scrollbar-color: var(--sb-thumb) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--sb-thumb) transparent; }
 
 *::-webkit-scrollbar { width: var(--sb-size); height: var(--sb-size); }
 *::-webkit-scrollbar-track { background: transparent; }

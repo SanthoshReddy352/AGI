@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { LogoMark, Search, Sun, Moon } from "./icons.jsx";
 
 const reduce = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -10,9 +10,13 @@ export function scrollToId(id) {
 // A single configurable premium nav. `items` are either route links (with `to`)
 // or in-page section links (with `id`, optionally `spy` for scrollspy).
 export default function Nav({ items = [], mega = null, showCmdk = false, cta, mobileItems = [] }) {
+  const location = useLocation();
   const renderLink = (it, cls = "navx__link") => {
     if (it.href) return <a key={it.label} className={cls} href={it.href} target={it.external ? "_blank" : undefined} rel={it.external ? "noreferrer" : undefined}>{it.label}</a>;
-    if (it.to) return <Link key={it.label} className={cls} to={it.to}>{it.label}</Link>;
+    if (it.to) {
+      const isCurrent = location.pathname === it.to;
+      return <Link key={it.label} className={cls} to={it.to} aria-current={isCurrent ? "true" : undefined}>{it.label}</Link>;
+    }
     return (
       <a
         key={it.label}
@@ -30,7 +34,16 @@ export default function Nav({ items = [], mega = null, showCmdk = false, cta, mo
     <>
       <nav className="navx" aria-label="Primary">
         <div className="navx__bar">
-          <Link className="navx__brand" to="/">
+          <Link
+            className="navx__brand"
+            to="/"
+            onClick={(e) => {
+              if (location.pathname === "/") {
+                e.preventDefault();
+                scrollToId("top");
+              }
+            }}
+          >
             <span className="mark" aria-hidden="true"><LogoMark size={16} /></span> Namma Agent
           </Link>
           <div className="navx__nav">

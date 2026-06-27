@@ -27,6 +27,16 @@ export function useVellum(key) {
 
     document.documentElement.classList.add("is-loaded");
 
+    // Close mobile menu and restore scroll on path transition
+    const bInit = $(".burger");
+    const mInit = $(".mobilemenu");
+    if (bInit && mInit) {
+      bInit.classList.remove("open");
+      mInit.classList.remove("open");
+      mInit.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+    }
+
     /* ---- Theme (persisted), via delegation so it survives re-renders ---- */
     const root = document.documentElement;
     const savedTheme = localStorage.getItem("vellum-theme");
@@ -110,7 +120,10 @@ export function useVellum(key) {
       const moveTo = (el) => {
         if (!pill || !el) return;
         navNav.classList.add("show-pill");
-        pill.style.setProperty("--pill-x", `${el.offsetLeft}px`);
+        const navRect = navNav.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const offsetLeft = elRect.left - navRect.left;
+        pill.style.setProperty("--pill-x", `${offsetLeft}px`);
         pill.style.setProperty("--pill-w", `${el.offsetWidth}px`);
       };
       const rest = () => {
@@ -129,8 +142,14 @@ export function useVellum(key) {
       const spyLinks = $$("[data-spy]", navNav);
       if (spyLinks.length && "IntersectionObserver" in window) {
         const setCurrent = (id) => {
-          spyLinks.forEach((l) => l.setAttribute("aria-current", String(l.dataset.spy === id)));
-          const cur = spyLinks.find((l) => l.dataset.spy === id);
+          spyLinks.forEach((l) => {
+            const spies = l.dataset.spy.split(",").map((s) => s.trim());
+            l.setAttribute("aria-current", String(spies.includes(id)));
+          });
+          const cur = spyLinks.find((l) => {
+            const spies = l.dataset.spy.split(",").map((s) => s.trim());
+            return spies.includes(id);
+          });
           if (cur && !navNav.matches(":hover")) moveTo(cur);
         };
         const spy = new IntersectionObserver(
@@ -138,10 +157,22 @@ export function useVellum(key) {
           { rootMargin: "-45% 0px -50% 0px" }
         );
         spyLinks.forEach((l) => {
-          const t = document.getElementById(l.dataset.spy);
-          if (t) spy.observe(t);
+          const ids = l.dataset.spy.split(",").map((s) => s.trim());
+          ids.forEach((id) => {
+            const t = document.getElementById(id);
+            if (t) spy.observe(t);
+          });
         });
         observers.push(spy);
+
+        // Force Overview highlight when at the very top of the page
+        const handleScroll = () => {
+          if (window.scrollY < 50) {
+            setCurrent("top");
+          }
+        };
+        window.addEventListener("scroll", handleScroll, passive);
+        handleScroll();
       }
       requestAnimationFrame(rest);
     }
@@ -180,6 +211,10 @@ export function useVellum(key) {
       };
       burger.addEventListener("click", () => toggle(), opts);
       $$("a", mobile).forEach((a) => a.addEventListener("click", () => toggle(false), opts));
+      const brandLink = $(".navx__brand");
+      if (brandLink) {
+        brandLink.addEventListener("click", () => toggle(false), opts);
+      }
     }
 
     /* ---------- Command palette ---------- */

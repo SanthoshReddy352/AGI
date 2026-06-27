@@ -394,7 +394,7 @@
 .tip:hover .tip__bub, .tip:focus-within .tip__bub { opacity: 1; visibility: visible; transform: translateX(-50%); transition: opacity var(--t-fast) var(--ease-out), transform var(--t-base) var(--ease-spring); }
 
 /* generic section sub-grid for the suite page — premium column gap */
-.suite-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-col); align-items: start; }
+.suite-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-col); align-items: center; }
 @media (max-width: 820px) { .suite-grid { grid-template-columns: 1fr; gap: var(--s-6); } }
 
 /* ---------------------------------------------------------- */

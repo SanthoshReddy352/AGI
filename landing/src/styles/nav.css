@@ -57,6 +57,7 @@
   font-size: 1.12rem;
   letter-spacing: -0.02em;
   padding-right: var(--s-3);
+  white-space: nowrap;
 }
 .navx__brand .mark {
   width: 28px; height: 28px;
@@ -115,11 +116,11 @@
 .navx__link:hover,
 .navx__link[aria-current="true"],
 .navx__link[aria-expanded="true"] { color: var(--ink); }
-.navx__link .caret {
+.navx__link .nav-caret {
   width: 14px; height: 14px;
   transition: transform var(--t-base) var(--ease-out);
 }
-.navx__link[aria-expanded="true"] .caret { transform: rotate(180deg); }
+.navx__link[aria-expanded="true"] .nav-caret { transform: rotate(180deg); }
 
 /* Scrollspy dot under active link */
 .navx__link[aria-current="true"]::after {
@@ -133,7 +134,7 @@
 }
 
 /* Right cluster */
-.navx__right { display: flex; align-items: center; gap: 10px; }
+.navx__right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
 /* Command-K pill */
 .cmdk {
@@ -252,35 +253,53 @@
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: var(--canvas);
-  padding: 96px var(--gutter) var(--gutter);
+  background: var(--surface);
+  padding: 84px var(--gutter) var(--gutter);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-12px);
+  transform: scale(0.98);
   transition: opacity var(--t-base) var(--ease-out), transform var(--t-base) var(--ease-out), visibility 0s linear var(--t-base);
 }
 .mobilemenu.open {
-  opacity: 1; visibility: visible; transform: none;
-  transition: opacity var(--t-base) var(--ease-out), transform var(--t-slow) var(--ease-out);
+  opacity: 1; visibility: visible; transform: scale(1);
+  transition: opacity var(--t-base) var(--ease-out), transform var(--t-base) var(--ease-spring);
 }
 /* direct-child links only, so the footer buttons keep their own styling */
 .mobilemenu > a {
-  font-family: var(--font-display);
-  font-size: clamp(1.8rem, 8vw, 2.25rem);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  padding: 14px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-body);
+  font-size: 1.15rem;
+  font-weight: 550;
+  color: var(--ink-muted);
+  padding: var(--s-4) 0;
   border-bottom: 1px solid var(--line);
+  text-decoration: none;
   opacity: 0;
-  transform: translateY(14px);
+  transform: translateY(10px);
+  transition: color var(--t-fast) var(--ease-out);
+}
+.mobilemenu > a::after {
+  content: "→";
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  transition: transform var(--t-fast) var(--ease-spring), color var(--t-fast) var(--ease-out);
+}
+.mobilemenu > a:hover::after {
+  transform: translateX(4px);
+  color: var(--accent);
+}
+.mobilemenu > a:hover {
+  color: var(--ink);
 }
 .mobilemenu.open > a {
   opacity: 1; transform: none;
   transition: opacity var(--t-slow) var(--ease-out), transform var(--t-slow) var(--ease-out);
-  transition-delay: calc(var(--i, 0) * 60ms + 80ms);
+  transition-delay: calc(var(--i, 0) * 50ms + 50ms);
 }
 .mobilemenu .mm-foot {
   margin-top: auto;
@@ -295,9 +314,33 @@
   font-size: var(--fs-body);
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
+  .navx {
+    padding: 0;
+    background: color-mix(in srgb, var(--canvas) 85%, transparent);
+    backdrop-filter: saturate(150%) blur(16px);
+    -webkit-backdrop-filter: saturate(150%) blur(16px);
+    border-bottom: 1px solid var(--line);
+    transition: padding var(--t-slow) var(--ease-out), background var(--t-slow) var(--ease-out), border-color var(--t-slow) var(--ease-out);
+  }
+  .navx.is-float {
+    padding: 0;
+    box-shadow: var(--e1);
+  }
+  .navx__bar {
+    max-width: 100%;
+    padding: 8px 16px;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
   .navx__nav, .navx__right .cmdk { display: none; }
   .burger { display: block; }
+}
+@media (max-width: 600px) {
+  .navx__right .btn { display: none; }
 }
 
 /* ---------------------------------------------------------- */

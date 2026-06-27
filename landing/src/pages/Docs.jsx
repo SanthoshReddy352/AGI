@@ -51,15 +51,23 @@ function go(id) {
 function useScrollSpy() {
   const [active, setActive] = useState(ALL_IDS[0]);
   useEffect(() => {
-    const io = new IntersectionObserver(
-      (entries) => {
-        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (vis[0]) setActive(vis[0].target.id);
-      },
-      { rootMargin: "-30% 0px -60% 0px", threshold: 0 }
-    );
-    ALL_IDS.forEach((id) => { const el = document.getElementById(id); if (el) io.observe(el); });
-    return () => io.disconnect();
+    const sectionElements = ALL_IDS.map(id => document.getElementById(id)).filter(Boolean);
+    const handleScroll = () => {
+      let currentSectionId = ALL_IDS[0];
+      const threshold = window.innerHeight * 0.45;
+      for (const el of sectionElements) {
+        const rect = el.getBoundingClientRect();
+        if (rect.top <= threshold) {
+          currentSectionId = el.id;
+        } else {
+          break;
+        }
+      }
+      setActive(currentSectionId);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
   return active;
 }
@@ -76,6 +84,38 @@ const mobileItems = [
 
 export default function Docs() {
   const active = useScrollSpy();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const activeLabel = NAV.flatMap(([_, items]) => items).find(([id]) => id === active)?.[1] || "Overview";
+
+  const go = (id) => (e) => {
+    e.preventDefault();
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: reduce() ? "auto" : "smooth", block: "start" });
+    setMobileMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    const activeLink = document.querySelector(`.docs-side a[href="#${active}"]`);
+    const sidebar = document.querySelector(".docs-side");
+    if (activeLink && sidebar) {
+      const sidebarRect = sidebar.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+
+      let newScrollTop = sidebar.scrollTop;
+      if (linkRect.top < sidebarRect.top) {
+        newScrollTop += (linkRect.top - sidebarRect.top) - 16;
+      } else if (linkRect.bottom > sidebarRect.bottom) {
+        newScrollTop += (linkRect.bottom - sidebarRect.bottom) + 16;
+      }
+
+      if (newScrollTop !== sidebar.scrollTop) {
+        sidebar.scrollTo({ top: newScrollTop, behavior: "smooth" });
+      }
+    }
+  }, [active]);
+
   return (
     <>
       <Nav items={navItems} cta={{ to: "/", label: "Back to site" }} mobileItems={mobileItems} />
@@ -84,14 +124,20 @@ export default function Docs() {
         <div className="docs-grid">
           {/* SIDEBAR */}
           <aside className="docs-side" aria-label="Docs navigation">
-            {NAV.map(([group, items]) => (
-              <div key={group}>
-                <div className="group">{group}</div>
-                {items.map(([id, label]) => (
-                  <a key={id} href={`#${id}`} className={active === id ? "active" : ""} onClick={go(id)}>{label}</a>
-                ))}
-              </div>
-            ))}
+            <div className="docs-side__header" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+              <span>Menu: <b>{activeLabel}</b></span>
+              <svg className={`chevron ${mobileMenuOpen ? "open" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div className={`docs-side__links ${mobileMenuOpen ? "open" : ""}`}>
+              {NAV.map(([group, items]) => (
+                <div key={group}>
+                  <div className="group">{group}</div>
+                  {items.map(([id, label]) => (
+                    <a key={id} href={`#${id}`} className={active === id ? "active" : ""} onClick={go(id)}>{label}</a>
+                  ))}
+                </div>
+              ))}
+            </div>
           </aside>
 
           {/* CONTENT */}

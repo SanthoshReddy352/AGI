@@ -42,13 +42,15 @@ export function Note({ kind = "", title, children }) {
 
 export function CfgTable({ rows }) {
   return (
-    <table className="cfg-table">
-      <thead><tr><th>Key</th><th>What it does</th></tr></thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r[0]}><td>{r[0]}</td><td>{r[1]}</td></tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="cfg-table-wrap">
+      <table className="cfg-table">
+        <thead><tr><th>Key</th><th>What it does</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r[0]}><td>{r[0]}</td><td>{r[1]}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
